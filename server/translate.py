@@ -86,7 +86,19 @@ def _term_for_dict(text: str) -> str | None:
     return longest.lower() if len(longest) >= 4 else words[0].lower()
 
 
+_DICT_API_DEAD_UNTIL = 0.0
+
+
+def cache_get(key: str):
+    return _cache_get(key)
+
+
+def cache_set(key: str, value) -> None:
+    _cache_set(key, value)
+
+
 def dictionary_lookup(term: str) -> dict | None:
+    global _DICT_API_DEAD_UNTIL
     term = term.strip().lower()
     if not term or " " in term:
         return None
@@ -94,10 +106,13 @@ def dictionary_lookup(term: str) -> dict | None:
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached or None
+    if time.time() < _DICT_API_DEAD_UNTIL:
+        return None
     try:
-        raw = _http_get(f"https://api.dictionaryapi.dev/api/v2/entries/en/{urllib.parse.quote(term)}")
+        raw = _http_get(f"https://api.dictionaryapi.dev/api/v2/entries/en/{urllib.parse.quote(term)}", timeout=4)
         entries = json.loads(raw.decode("utf-8"))
     except Exception:
+        _DICT_API_DEAD_UNTIL = time.time() + 3600
         _cache_set(cache_key, [])
         return None
     if not isinstance(entries, list) or not entries:

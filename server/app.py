@@ -40,6 +40,17 @@ def index():
     return html
 
 
+def _translate_with_cache(q: str, sl: str, tl: str) -> dict:
+    """完整响应级缓存：查过的词直接秒回。"""
+    cache_key = f"resp:{sl}:{tl}:{q}"
+    cached = engine.cache_get(cache_key)
+    if isinstance(cached, dict) and cached.get("ok"):
+        return cached
+    result = build_translation(q, sl, tl)
+    engine.cache_set(cache_key, result)
+    return result
+
+
 @app.get("/api/translate")
 def api_translate():
     if not _authorized():
@@ -52,7 +63,7 @@ def api_translate():
     sl = request.args.get("from") or "auto"
     tl = request.args.get("to") or ""
     try:
-        result = build_translation(q, sl, tl)
+        result = _translate_with_cache(q, sl, tl)
         return jsonify(result)
     except Exception as exc:  # noqa: BLE001
         return jsonify(ok=False, error=f"translate failed: {exc}"), 502
@@ -145,7 +156,7 @@ def api_ocr_translate():
         from urllib.parse import quote as _quote
         extracted = engine.extract_text_from_image(data)
         q = extracted[:500]
-        result = build_translation(q, "auto", "")
+        result = _translate_with_cache(q, "auto", "")
         result["extracted"] = extracted
         return jsonify(result)
     except Exception as exc:  # noqa: BLE001
