@@ -53,7 +53,11 @@
       <span class="lang" id="dirLabel">自动检测 → 自动</span>
       <button type="button" class="swap" id="swap">⇄ 切换方向</button>
     </div>
-    <button type="button" class="go" id="go">翻 译</button>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button type="button" class="go" id="go" style="flex:1">翻 译</button>
+      <button type="button" class="go" id="ocrBtn" style="width:64px;font-size:20px" title="截图翻译">📷</button>
+    </div>
+    <input type="file" id="imgInput" accept="image/*" style="display:none">
   </div>
 
   <div id="result"></div>
@@ -119,6 +123,27 @@ function translate(){
     .catch(function(){ resultEl.innerHTML='<div class="card"><div class="err">网络错误，请重试</div></div>'; });
 }
 document.getElementById('go').addEventListener('click', translate);
+var imgInput = document.getElementById('imgInput');
+document.getElementById('ocrBtn').addEventListener('click', function(){ imgInput.click(); });
+imgInput.addEventListener('change', function(){
+  var file = imgInput.files && imgInput.files[0];
+  if (!file) return;
+  resultEl.innerHTML = '<div class="card"><div class="empty">识别截图中…</div></div>';
+  var fd = new FormData();
+  fd.append('image', file);
+  fetch('api/ocr-translate?token=*** + encodeURIComponent(window.API_TOKEN || ''), { method: 'POST', credentials: 'same-origin', body: fd })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok) { resultEl.innerHTML = '<div class="card"><div class="err">'+esc(d.error||'识别失败')+'</div></div>'; return; }
+      render(d);
+      var pre = document.createElement('div');
+      pre.className = 'card';
+      pre.innerHTML = '<div class="sec-title" style="margin-top:0">识别到的文字</div><div style="font-size:14px;white-space:pre-wrap;line-height:1.7">' + esc(d.extracted || '') + '</div>';
+      resultEl.insertBefore(pre, resultEl.firstChild);
+    })
+    .catch(function(){ resultEl.innerHTML = '<div class="card"><div class="err">上传失败，请重试</div></div>'; });
+  imgInput.value = '';
+});
 qEl.addEventListener('keydown', function(e){ if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) translate(); });
 </script>
 </body>

@@ -10,6 +10,7 @@ import android.webkit.WebViewClient
 
 class MainActivity : Activity() {
     private lateinit var web: WebView
+    private var filePathCallback: android.webkit.ValueCallback<Array<android.net.Uri>>? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,7 +24,21 @@ class MainActivity : Activity() {
                 return false
             }
         }
-        web.webChromeClient = WebChromeClient()
+        web.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(
+                wv: WebView?,
+                cb: android.webkit.ValueCallback<Array<android.net.Uri>>,
+                params: FileChooserParams?
+            ): Boolean {
+                filePathCallback?.onReceiveValue(null)
+                filePathCallback = cb
+                val intent = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT)
+                intent.addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                intent.type = "image/*"
+                startActivityForResult(android.content.Intent.createChooser(intent, "选择图片"), 1001)
+                return true
+            }
+        }
         web.setDownloadListener { url, _, _, _, _ ->
             val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
             startActivity(intent)
@@ -39,6 +54,18 @@ class MainActivity : Activity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         web.saveState(outState)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        if (requestCode == 1001) {
+            val cb = filePathCallback
+            filePathCallback = null
+            val results = if (resultCode == RESULT_OK && data?.data != null) arrayOf(data.data!!) else null
+            cb?.onReceiveValue(results)
+            return
+        }
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     @Deprecated("Deprecated in Java")

@@ -239,7 +239,7 @@ def deepseek_full(q: str) -> dict | None:
     if not key:
         return None
     system = (
-        "你是中英互译与词典引擎。对用户输入完成中英互译，并尽量给出词典信息。"
+        "你是中英互译与词典引擎。对用户输入完成中英互译（若同时含中英文，把英文部分翻成中文、中文部分保留），并尽量给出词典信息。"
         '只输出 JSON：{"translation":"译文","detected":"en 或 zh-CN","term":"英文原词或英文译文核心词",'
         '"phonetic":"term的IPA音标","meanings":[{"pos":"词性","definition":"英文释义","zh":"中文释义"}],'
         '"examples":[{"en":"英文例句","zh":"例句中文翻译"}]}。'
@@ -267,7 +267,23 @@ def deepseek_full(q: str) -> dict | None:
     )
     with urllib.request.urlopen(req, timeout=45) as resp:
         data = json.loads(resp.read().decode("utf-8"))
-    parsed = json.loads(data["choices"][0]["message"]["content"])
+    content = str((data.get("choices") or [{}])[0].get("message", {}).get("content") or "")
+    parsed = None
+    cleaned = content.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("` \n")
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:]
+        cleaned = cleaned.strip()
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            parsed = json.loads(cleaned[start:end + 1])
+        except json.JSONDecodeError:
+            parsed = None
+    if not isinstance(parsed, dict):
+        parsed = {"translation": cleaned.strip()[:1000]}
     result = {
         "translation": str(parsed.get("translation") or "").strip(),
         "detected": str(parsed.get("detected") or "").strip() or "en",
@@ -317,3 +333,53 @@ def smart_translate(q: str, sl: str = "auto", tl: str = "") -> dict:
         raise RuntimeError("所有翻译引擎均不可用")
     _cache_set(cache_key, result)
     return result
+
+# ---------- 截图文字识别（GLM 视觉模型 OCR） ----------
+
+def _zai_key() -> str | None:
+    import os
+    key = os.environ.get("TRANSLATOR_ZAI_KEY", "")
+    if key:
+        return key
+    try:
+        data = json.loads(Path("/root/.openclaw/secrets.json").read_text(encoding="utf-8"))
+        return data.get("models", {}).get("providers", {}).get("zai", {}).get("apiKey")
+    except Exception:
+        return None
+
+
+def extract_text_from_image(image_bytes: bytes) -> str:
+    """用 GLM 视觉模型提取图片中的中英文文字。"""
+    import base64
+    key = _zai_key()
+    if not key:
+        raise RuntimeError("视觉模型密钥未配置")
+    b64 = base64.b64encode(image_bytes).decode("ascii")
+    payload = json.dumps(
+        {
+            "model": "glm-4.6v",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                        {"type": "text", "text": "提取图片中所有可见的中英文文字，保持阅读顺序，只输出提取到的文字本身，不要解释。"},
+                    ],
+                }
+            ],
+            "temperature": 0.1,
+            "max_tokens": 2000,
+        }
+    ).encode()
+    req = urllib.request.Request(
+        "https://api.z.ai/api/coding/paas/v4/chat/completions",
+        data=payload,
+        method="POST",
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}", "User-Agent": UA},
+    )
+    with urllib.request.urlopen(req, timeout=90) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    text = str(data["choices"][0]["message"]["content"] or "").strip()
+    if not text:
+        raise RuntimeError("未识别到文字")
+    return text

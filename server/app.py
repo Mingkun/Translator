@@ -115,6 +115,29 @@ def build_translation(q: str, sl: str, tl: str) -> dict:
     }
 
 
+@app.post("/api/ocr-translate")
+def api_ocr_translate():
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    file = request.files.get("image")
+    if file is None:
+        return jsonify(ok=False, error="缺少图片"), 400
+    data = file.read()
+    if len(data) < 100:
+        return jsonify(ok=False, error="图片无效"), 400
+    if len(data) > 8 * 1024 * 1024:
+        return jsonify(ok=False, error="图片过大（限8MB）"), 400
+    try:
+        from urllib.parse import quote as _quote
+        extracted = engine.extract_text_from_image(data)
+        q = extracted[:500]
+        result = build_translation(q, "auto", "")
+        result["extracted"] = extracted
+        return jsonify(result)
+    except Exception as exc:  # noqa: BLE001
+        return jsonify(ok=False, error=f"识别或翻译失败: {exc}"), 502
+
+
 @app.get("/downloads/<path:name>")
 def downloads(name: str):
     import urllib.parse as _up
