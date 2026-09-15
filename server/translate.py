@@ -151,7 +151,40 @@ def audio_id_for(kind: str, payload: str) -> str:
     return hashlib.sha1(f"{kind}:{payload}".encode("utf-8")).hexdigest()[:20]
 
 
+MALE_VOICES = {"en": "en-US-ChristopherNeural", "zh-CN": "zh-CN-YunxiNeural"}
+
+
 def tts_bytes(text: str, lang: str) -> bytes:
+    """优先 Edge TTS 男声；失败回退 Google TTS。缓存键含音色命名空间。"""
+    try:
+        return _edge_tts_bytes(text, lang)
+    except Exception:
+        pass
+    return _google_tts_bytes(text, lang)
+
+
+def _edge_tts_bytes(text: str, lang: str) -> bytes:
+    import asyncio
+    import edge_tts
+
+    voice = MALE_VOICES.get(lang, "en-US-ChristopherNeural")
+    cache_id = audio_id_for("edge", f"{voice}:{text}")
+    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    path = AUDIO_DIR / f"{cache_id}.mp3"
+    if path.is_file() and path.stat().st_size > 0:
+        return path.read_bytes()
+
+    async def _run() -> None:
+        communicate = edge_tts.Communicate(text[:180], voice)
+        await communicate.save(str(path))
+
+    asyncio.run(_run())
+    if not path.is_file() or path.stat().st_size == 0:
+        raise RuntimeError("edge tts empty")
+    return path.read_bytes()
+
+
+def _google_tts_bytes(text: str, lang: str) -> bytes:
     cache_id = audio_id_for("tts", f"{lang}:{text}")
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     path = AUDIO_DIR / f"{cache_id}.mp3"
