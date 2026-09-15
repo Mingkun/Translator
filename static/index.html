@@ -131,7 +131,8 @@ imgInput.addEventListener('change', function(){
   resultEl.innerHTML = '<div class="card"><div class="empty">识别截图中…</div></div>';
   var fd = new FormData();
   fd.append('image', file);
-  fetch('api/ocr-translate?token=*** + encodeURIComponent(window.API_TOKEN || ''), { method: 'POST', credentials: 'same-origin', body: fd })
+  var ocrUrl = 'api/ocr-translate?token=' + encodeURIComponent(window.API_TOKEN || '');
+  fetch(ocrUrl, { method: 'POST', credentials: 'same-origin', body: fd })
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (!d.ok) { resultEl.innerHTML = '<div class="card"><div class="err">'+esc(d.error||'识别失败')+'</div></div>'; return; }
