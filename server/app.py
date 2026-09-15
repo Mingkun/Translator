@@ -115,6 +115,19 @@ def build_translation(q: str, sl: str, tl: str) -> dict:
     }
 
 
+@app.get("/downloads/<path:name>")
+def downloads(name: str):
+    import urllib.parse as _up
+    safe = _up.unquote(name)
+    if "/" in safe or ".." in safe or not safe.isascii():
+        abort(400)
+    path = APP_ROOT / "static" / "downloads" / safe
+    if not path.is_file():
+        abort(404)
+    mime = "application/vnd.android.package-archive" if safe.endswith(".apk") else "application/octet-stream"
+    return Response(path.read_bytes(), mimetype=mime)
+
+
 @app.get("/api/tts")
 def api_tts():
     if not _authorized():
