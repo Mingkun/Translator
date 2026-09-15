@@ -405,3 +405,34 @@ def extract_text_from_image(image_bytes: bytes) -> str:
     if not text:
         raise RuntimeError("未识别到文字")
     return text
+
+# ---------- 查询历史 ----------
+
+def _history_db() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, timeout=15)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS history (q TEXT PRIMARY KEY, created_at REAL)"
+    )
+    return conn
+
+
+def record_history(q: str) -> None:
+    q = q.strip()
+    if not q or len(q) > 500:
+        return
+    with _history_db() as conn:
+        conn.execute(
+            "INSERT INTO history (q, created_at) VALUES (?, ?) "
+            "ON CONFLICT(q) DO UPDATE SET created_at = excluded.created_at",
+            (q, time.time()),
+        )
+
+
+def load_history(limit: int = 50) -> list[dict]:
+    with _history_db() as conn:
+        rows = conn.execute(
+            "SELECT q, created_at FROM history ORDER BY created_at DESC LIMIT ?",
+            (max(1, min(int(limit), 200)),),
+        ).fetchall()
+    return [{"q": r[0], "created_at": r[1]} for r in rows]

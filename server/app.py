@@ -45,9 +45,11 @@ def _translate_with_cache(q: str, sl: str, tl: str) -> dict:
     cache_key = f"resp:{sl}:{tl}:{q}"
     cached = engine.cache_get(cache_key)
     if isinstance(cached, dict) and cached.get("ok"):
+        engine.record_history(q)
         return cached
     result = build_translation(q, sl, tl)
     engine.cache_set(cache_key, result)
+    engine.record_history(q)
     return result
 
 
@@ -161,6 +163,18 @@ def api_ocr_translate():
         return jsonify(result)
     except Exception as exc:  # noqa: BLE001
         return jsonify(ok=False, error=f"识别或翻译失败: {exc}"), 502
+
+
+@app.get("/api/history")
+def api_history():
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    limit = request.args.get("limit", "50")
+    try:
+        limit = int(limit)
+    except ValueError:
+        limit = 50
+    return jsonify(ok=True, items=engine.load_history(limit))
 
 
 @app.get("/downloads/<path:name>")

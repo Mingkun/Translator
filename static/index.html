@@ -56,11 +56,21 @@
     <div style="display:flex;gap:8px;margin-top:10px">
       <button type="button" class="go" id="go" style="flex:1">翻 译</button>
       <button type="button" class="go" id="ocrBtn" style="width:64px;font-size:20px" title="截图翻译">📷</button>
+      <button type="button" class="go" id="historyBtn" style="width:64px;font-size:13px" title="历史">🕘 历史</button>
     </div>
     <input type="file" id="imgInput" accept="image/*" style="display:none">
   </div>
 
   <div id="result"></div>
+  <div id="historyOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
+    <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:70vh;display:flex;flex-direction:column;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <strong style="font-size:15px">🕘 查询历史</strong>
+        <button type="button" id="historyClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
+      </div>
+      <div id="historyList" style="overflow:auto;flex:1"></div>
+    </div>
+  </div>
   <div style="text-align:center;margin-top:18px">
     <a href="downloads/translator-android-debug.apk" style="color:#5a6472;font-size:13px;text-decoration:none">📱 安卓客户端下载</a>
   </div>
@@ -144,6 +154,37 @@ imgInput.addEventListener('change', function(){
     })
     .catch(function(){ resultEl.innerHTML = '<div class="card"><div class="err">上传失败，请重试</div></div>'; });
   imgInput.value = '';
+});
+var historyOverlay = document.getElementById('historyOverlay');
+var historyList = document.getElementById('historyList');
+function fmtTime(ts) {
+  var d = new Date(ts * 1000);
+  return (d.getMonth() + 1) + '-' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+document.getElementById('historyBtn').addEventListener('click', function () {
+  historyOverlay.style.display = 'flex';
+  historyList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
+  fetch('api/history?limit=50&token=*** + encodeURIComponent(window.API_TOKEN || ''))
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var items = (d && d.items) || [];
+      if (!items.length) { historyList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">暂无查询记录</div>'; return; }
+      historyList.innerHTML = items.map(function (it) {
+        return '<div data-q="' + esc(it.q) + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 8px;border-bottom:1px dashed #dde4ec;cursor:pointer">' +
+          '<span style="font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(it.q) + '</span>' +
+          '<span style="font-size:11px;color:#5a6472;flex-shrink:0">' + esc(fmtTime(it.created_at)) + '</span></div>';
+      }).join('');
+    })
+    .catch(function () { historyList.innerHTML = '<div style="color:#b02a37;font-size:13px;text-align:center;padding:16px">加载失败</div>'; });
+});
+document.getElementById('historyClose').addEventListener('click', function () { historyOverlay.style.display = 'none'; });
+historyOverlay.addEventListener('click', function (e) { if (e.target === historyOverlay) historyOverlay.style.display = 'none'; });
+historyList.addEventListener('click', function (e) {
+  var item = e.target.closest('[data-q]');
+  if (!item) return;
+  historyOverlay.style.display = 'none';
+  qEl.value = item.getAttribute('data-q') || '';
+  translate();
 });
 qEl.addEventListener('keydown', function(e){ if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) translate(); });
 </script>
