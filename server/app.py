@@ -99,6 +99,20 @@ def build_translation(q: str, sl: str, tl: str) -> dict:
             }
         )
 
+    movie_examples = []
+    for item in result.get("movie_examples", [])[:3]:
+        en_line = str(item.get("en") or "").strip()
+        if not en_line:
+            continue
+        movie_examples.append(
+            {
+                "en": en_line,
+                "zh": str(item.get("zh") or "").strip(),
+                "source": str(item.get("source") or "").strip(),
+                "audio": tts_url(en_line, "en"),
+            }
+        )
+
     return {
         "ok": True,
         "query": q,
@@ -111,7 +125,7 @@ def build_translation(q: str, sl: str, tl: str) -> dict:
         "audio_zh": audio_zh,
         "meanings": result.get("meanings", []),
         "examples": examples,
-        "movie_examples": [],
+        "movie_examples": movie_examples,
     }
 
 

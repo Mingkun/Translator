@@ -242,10 +242,12 @@ def deepseek_full(q: str) -> dict | None:
         "你是中英互译与词典引擎。对用户输入完成中英互译（若同时含中英文，把英文部分翻成中文、中文部分保留），并尽量给出词典信息。"
         '只输出 JSON：{"translation":"译文","detected":"en 或 zh-CN","term":"英文原词或英文译文核心词",'
         '"phonetic":"term的IPA音标","meanings":[{"pos":"词性","definition":"英文释义","zh":"中文释义"}],'
-        '"examples":[{"en":"英文例句","zh":"例句中文翻译"}]}。'
+        '"examples":[{"en":"英文例句","zh":"例句中文翻译"}],"movie_examples":[{"en":"影视台词","zh":"台词中文翻译","source":"出处片名"}]}。'
         "meanings 给 3-6 条最常用含义；examples 给 3-5 个自然常用的例句；"
+        'movie_examples 给 1-3 条该词/短语出现过的著名电影或美剧真实台词，格式 [{"en":"台词","zh":"台词中文翻译","source":"片名"}]，'
+        "只引用你确定真实存在的著名台词并标注片名，没有合适的不确定就给空数组，严禁编造；"
         "中文输入时 term 取英文译文的核心词；若输入是句子而非单词，term 与 phonetic 留空、"
-        "meanings 与 examples 留空数组。"
+        "meanings 与 examples 与 movie_examples 留空数组。"
     )
     payload = json.dumps(
         {
@@ -256,7 +258,7 @@ def deepseek_full(q: str) -> dict | None:
             ],
             "response_format": {"type": "json_object"},
             "temperature": 0.2,
-            "max_tokens": 1500,
+            "max_tokens": 2500,
         }
     ).encode()
     req = urllib.request.Request(
@@ -265,7 +267,7 @@ def deepseek_full(q: str) -> dict | None:
         method="POST",
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}", "User-Agent": UA},
     )
-    with urllib.request.urlopen(req, timeout=45) as resp:
+    with urllib.request.urlopen(req, timeout=75) as resp:
         data = json.loads(resp.read().decode("utf-8"))
     content = str((data.get("choices") or [{}])[0].get("message", {}).get("content") or "")
     parsed = None
@@ -291,6 +293,7 @@ def deepseek_full(q: str) -> dict | None:
         "phonetic": str(parsed.get("phonetic") or "").strip(),
         "meanings": [m for m in (parsed.get("meanings") or []) if isinstance(m, dict)][:6],
         "examples": [e for e in (parsed.get("examples") or []) if isinstance(e, dict)][:5],
+        "movie_examples": [e for e in (parsed.get("movie_examples") or []) if isinstance(e, dict) and e.get("en")][:3],
     }
     if not result["translation"]:
         return None
@@ -302,17 +305,21 @@ _GOOGLE_RATE_LIMITED_UNTIL = 0.0
 
 def smart_translate(q: str, sl: str = "auto", tl: str = "") -> dict:
     """主引擎 DeepSeek（全量），Google 免费接口兜底（纯翻译）。"""
-    cache_key = f"smart2:{sl}:{tl}:{q}"
+    cache_key = f"smart3:{sl}:{tl}:{q}"
     cached = _cache_get(cache_key)
     if cached:
         return cached
     result = None
-    try:
-        result = deepseek_full(q)
-        if result and result.get("detected", "").startswith("zh"):
-            result["detected"] = "zh-CN"
-    except Exception:
-        result = None
+    for attempt in range(2):
+        try:
+            result = deepseek_full(q)
+            if result and result.get("detected", "").startswith("zh"):
+                result["detected"] = "zh-CN"
+            break
+        except Exception:
+            if attempt == 0:
+                time.sleep(1.5)
+            result = None
     if result is None:
         global _GOOGLE_RATE_LIMITED_UNTIL
         if time.time() > _GOOGLE_RATE_LIMITED_UNTIL:
