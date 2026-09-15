@@ -164,7 +164,7 @@ function fmtTime(ts) {
 document.getElementById('historyBtn').addEventListener('click', function () {
   historyOverlay.style.display = 'flex';
   historyList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
-  fetch('api/history?limit=50&token=*** + encodeURIComponent(window.API_TOKEN || ''))
+  fetch('api/history?limit=50&token=' + encodeURIComponent(window.API_TOKEN || ''))
     .then(function (r) { return r.json(); })
     .then(function (d) {
       var items = (d && d.items) || [];
