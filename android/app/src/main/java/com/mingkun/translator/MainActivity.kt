@@ -24,6 +24,10 @@ class MainActivity : Activity() {
             }
         }
         web.webChromeClient = WebChromeClient()
+        web.setDownloadListener { url, _, _, _, _ ->
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+            startActivity(intent)
+        }
         setContentView(web)
         if (savedInstanceState != null) {
             web.restoreState(savedInstanceState)
