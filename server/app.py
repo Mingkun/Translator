@@ -80,7 +80,7 @@ def build_translation(q: str, sl: str, tl: str) -> dict:
             return ""
         from urllib.parse import quote as _quote
         suffix = f"&token={_client_token()}" if _client_token() else ""
-        return f"/api/tts?text={_quote(text[:180])}&lang={lang}{suffix}"
+        return f"api/tts?text={_quote(text[:180])}&lang={lang}{suffix}"
 
     audio_en = tts_url(term or en_text, "en")
     audio_zh = tts_url(zh_text, "zh-CN")
