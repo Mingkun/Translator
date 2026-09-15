@@ -1,0 +1,19 @@
+# 翻译数据缓存与音频文件
+data/
+
+# 运行时
+*.log
+*.pid
+__pycache__/
+*.pyc
+.venv/
+
+# 安卓构建产物
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+
+# 环境配置
+.env

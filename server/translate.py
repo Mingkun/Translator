@@ -1,0 +1,286 @@
+"""中英互译核心：翻译 + 词典增强（音标/发音/释义/例句）+ 缓存。"""
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import sqlite3
+import time
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+DB_PATH = Path(__file__).resolve().parents[1] / "data" / "cache.db"
+AUDIO_DIR = Path(__file__).resolve().parents[1] / "data" / "audio"
+
+
+def _http_get(url: str, timeout: int = 15) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read()
+
+
+# ---------- 缓存 ----------
+
+def _db() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, timeout=15)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT, created_at REAL)"
+    )
+    return conn
+
+
+def _cache_get(key: str):
+    with _db() as conn:
+        row = conn.execute("SELECT v FROM kv WHERE k = ?", (key,)).fetchone()
+    if not row:
+        return None
+    try:
+        return json.loads(row[0])
+    except json.JSONDecodeError:
+        return None
+
+
+def _cache_set(key: str, value) -> None:
+    with _db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO kv (k, v, created_at) VALUES (?, ?, ?)",
+            (key, json.dumps(value, ensure_ascii=False), time.time()),
+        )
+
+
+# ---------- 翻译（Google 免费接口） ----------
+
+def google_translate(q: str, sl: str = "auto", tl: str = "en") -> dict:
+    cache_key = f"tr:{sl}:{tl}:{q}"
+    cached = _cache_get(cache_key)
+    if cached:
+        return cached
+    url = (
+        "https://translate.googleapis.com/translate_a/single"
+        f"?client=gtx&sl={urllib.parse.quote(sl)}&tl={urllib.parse.quote(tl)}"
+        f"&dt=t&q={urllib.parse.quote(q)}"
+    )
+    raw = _http_get(url)
+    data = json.loads(raw.decode("utf-8"))
+    segments = data[0] or []
+    translated = "".join(str(seg[0]) for seg in segments if seg and seg[0])
+    detected = str(data[2] or sl) if len(data) > 2 else sl
+    result = {"translation": translated, "detected": detected}
+    _cache_set(cache_key, result)
+    return result
+
+
+# ---------- 英语词典（Free Dictionary API） ----------
+
+def _term_for_dict(text: str) -> str | None:
+    words = re.findall(r"[A-Za-z][A-Za-z'-]*", text)
+    if not words:
+        return None
+    # 多词短语时取主干词（最长的一个），单词直接用
+    if len(words) == 1:
+        return words[0].lower()
+    longest = max(words, key=len)
+    return longest.lower() if len(longest) >= 4 else words[0].lower()
+
+
+def dictionary_lookup(term: str) -> dict | None:
+    term = term.strip().lower()
+    if not term or " " in term:
+        return None
+    cache_key = f"dict:{term}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached or None
+    try:
+        raw = _http_get(f"https://api.dictionaryapi.dev/api/v2/entries/en/{urllib.parse.quote(term)}")
+        entries = json.loads(raw.decode("utf-8"))
+    except Exception:
+        _cache_set(cache_key, [])
+        return None
+    if not isinstance(entries, list) or not entries:
+        _cache_set(cache_key, [])
+        return None
+    entry = entries[0]
+    phonetic = str(entry.get("phonetic") or "")
+    audio_url = ""
+    for item in entry.get("phonetics") or []:
+        if item.get("audio"):
+            audio_url = str(item["audio"])
+            if not phonetic:
+                phonetic = str(item.get("text") or "")
+            break
+    if not phonetic:
+        for item in entry.get("phonetics") or []:
+            if item.get("text"):
+                phonetic = str(item["text"])
+                break
+    meanings: list[dict] = []
+    examples: list[str] = []
+    for meaning in entry.get("meanings") or []:
+        pos = str(meaning.get("partOfSpeech") or "")
+        for definition in (meaning.get("definitions") or [])[:3]:
+            text = str(definition.get("definition") or "").strip()
+            if not text:
+                continue
+            item = {"pos": pos, "definition": text}
+            example = str(definition.get("example") or "").strip()
+            if example:
+                item["example"] = example
+                if len(examples) < 6 and example not in examples:
+                    examples.append(example)
+            meanings.append(item)
+        for synonym in (meaning.get("synonyms") or [])[:4]:
+            meanings.append({"pos": pos, "definition": f"同义词：{synonym}"})
+    result = {
+        "term": term,
+        "phonetic": phonetic,
+        "audio_url": audio_url,
+        "meanings": meanings[:12],
+        "examples": examples,
+    }
+    _cache_set(cache_key, result)
+    return result
+
+
+# ---------- 发音音频 ----------
+
+def audio_id_for(kind: str, payload: str) -> str:
+    return hashlib.sha1(f"{kind}:{payload}".encode("utf-8")).hexdigest()[:20]
+
+
+def tts_bytes(text: str, lang: str) -> bytes:
+    cache_id = audio_id_for("tts", f"{lang}:{text}")
+    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    path = AUDIO_DIR / f"{cache_id}.mp3"
+    if path.is_file() and path.stat().st_size > 0:
+        return path.read_bytes()
+    url = (
+        "https://translate.google.com/translate_tts"
+        f"?ie=UTF-8&client=tw-ob&tl={urllib.parse.quote(lang)}"
+        f"&q={urllib.parse.quote(text[:180])}"
+    )
+    raw = _http_get(url)
+    path.write_bytes(raw)
+    return raw
+
+
+def dict_audio(audio_url: str) -> bytes:
+    cache_id = audio_id_for("url", audio_url)
+    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    path = AUDIO_DIR / f"{cache_id}.mp3"
+    if path.is_file() and path.stat().st_size > 0:
+        return path.read_bytes()
+    raw = _http_get(audio_url)
+    path.write_bytes(raw)
+    return raw
+
+
+def serve_cached_audio(cache_id: str) -> bytes | None:
+    path = AUDIO_DIR / f"{cache_id}.mp3"
+    if path.is_file():
+        return path.read_bytes()
+    return None
+
+
+# ---------- DeepSeek 翻译（主引擎） ----------
+
+def _deepseek_key() -> str | None:
+    import os
+    key = os.environ.get("TRANSLATOR_DEEPSEEK_KEY", "")
+    if key:
+        return key
+    try:
+        secrets_path = Path("/root/.openclaw/secrets.json")
+        data = json.loads(secrets_path.read_text(encoding="utf-8"))
+        return data.get("models", {}).get("providers", {}).get("deepseek", {}).get("apiKey")
+    except Exception:
+        return None
+
+
+def deepseek_full(q: str) -> dict | None:
+    """一次调用输出：译文 + 语言检测 + 词典词 + IPA音标 + 常用含义(带中文) + 常用例句(带中文)。"""
+    key = _deepseek_key()
+    if not key:
+        return None
+    system = (
+        "你是中英互译与词典引擎。对用户输入完成中英互译，并尽量给出词典信息。"
+        '只输出 JSON：{"translation":"译文","detected":"en 或 zh-CN","term":"英文原词或英文译文核心词",'
+        '"phonetic":"term的IPA音标","meanings":[{"pos":"词性","definition":"英文释义","zh":"中文释义"}],'
+        '"examples":[{"en":"英文例句","zh":"例句中文翻译"}]}。'
+        "meanings 给 3-6 条最常用含义；examples 给 3-5 个自然常用的例句；"
+        "中文输入时 term 取英文译文的核心词；若输入是句子而非单词，term 与 phonetic 留空、"
+        "meanings 与 examples 留空数组。"
+    )
+    payload = json.dumps(
+        {
+            "model": "deepseek-flash",
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": q},
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.2,
+            "max_tokens": 1500,
+        }
+    ).encode()
+    req = urllib.request.Request(
+        "https://api.deepseek.com/chat/completions",
+        data=payload,
+        method="POST",
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}", "User-Agent": UA},
+    )
+    with urllib.request.urlopen(req, timeout=45) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    parsed = json.loads(data["choices"][0]["message"]["content"])
+    result = {
+        "translation": str(parsed.get("translation") or "").strip(),
+        "detected": str(parsed.get("detected") or "").strip() or "en",
+        "term": str(parsed.get("term") or "").strip(),
+        "phonetic": str(parsed.get("phonetic") or "").strip(),
+        "meanings": [m for m in (parsed.get("meanings") or []) if isinstance(m, dict)][:6],
+        "examples": [e for e in (parsed.get("examples") or []) if isinstance(e, dict)][:5],
+    }
+    if not result["translation"]:
+        return None
+    return result
+
+
+_GOOGLE_RATE_LIMITED_UNTIL = 0.0
+
+
+def smart_translate(q: str, sl: str = "auto", tl: str = "") -> dict:
+    """主引擎 DeepSeek（全量），Google 免费接口兜底（纯翻译）。"""
+    cache_key = f"smart2:{sl}:{tl}:{q}"
+    cached = _cache_get(cache_key)
+    if cached:
+        return cached
+    result = None
+    try:
+        result = deepseek_full(q)
+        if result and result.get("detected", "").startswith("zh"):
+            result["detected"] = "zh-CN"
+    except Exception:
+        result = None
+    if result is None:
+        global _GOOGLE_RATE_LIMITED_UNTIL
+        if time.time() > _GOOGLE_RATE_LIMITED_UNTIL:
+            try:
+                target = tl or "en"
+                g = google_translate(q, sl=sl, tl=target)
+                result = {
+                    "translation": g.get("translation") or "",
+                    "detected": g.get("detected") or sl,
+                    "term": "", "phonetic": "", "meanings": [], "examples": [],
+                }
+            except urllib.error.HTTPError as exc:
+                if exc.code == 429:
+                    _GOOGLE_RATE_LIMITED_UNTIL = time.time() + 600
+            except Exception:
+                pass
+    if not result or not result.get("translation"):
+        raise RuntimeError("所有翻译引擎均不可用")
+    _cache_set(cache_key, result)
+    return result

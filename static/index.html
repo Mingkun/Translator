@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>🦜 翻译鹦鹉</title>
+<style>
+  :root { --bg:#f7f9fc; --card:#ffffff; --text:#1f2630; --muted:#5a6472; --brand:#e8590c; --line:#dde4ec; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background:var(--bg); color:var(--text); }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 16px 14px calc(40px + env(safe-area-inset-bottom)); }
+  header { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  header .logo { font-size:30px; }
+  header h1 { font-size:19px; margin:0; }
+  header .sub { font-size:12px; color:var(--muted); }
+  .input-card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; box-shadow:0 2px 10px rgba(15,23,42,.04); }
+  .row { display:flex; gap:8px; align-items:center; }
+  textarea { width:100%; min-height:88px; border:none; outline:none; resize:vertical; font-size:17px; background:transparent; color:var(--text); }
+  .lang-row { display:flex; gap:8px; align-items:center; justify-content:space-between; padding-top:8px; border-top:1px dashed var(--line); }
+  .lang { font-size:13px; color:var(--muted); }
+  .swap { border:1px solid var(--line); background:#fff; border-radius:8px; padding:5px 12px; font-size:13px; cursor:pointer; color:var(--text); }
+  .go { width:100%; margin-top:10px; border:none; border-radius:10px; background:var(--brand); color:#fff; font-size:16px; padding:11px 0; cursor:pointer; }
+  .go:active { opacity:.85; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-top:12px; box-shadow:0 2px 10px rgba(15,23,42,.04); }
+  .trans-main { font-size:22px; font-weight:600; line-height:1.5; }
+  .phonetic-row { display:flex; align-items:center; gap:10px; margin-top:6px; color:var(--muted); font-size:14px; flex-wrap:wrap; }
+  .speak { border:1px solid var(--line); background:#fff; border-radius:50%; width:30px; height:30px; font-size:14px; cursor:pointer; line-height:1; }
+  .sec-title { font-size:13px; color:var(--muted); margin:14px 0 6px; font-weight:600; }
+  .meaning { font-size:14px; padding:6px 0; border-bottom:1px dashed var(--line); }
+  .meaning:last-child { border-bottom:none; }
+  .meaning .pos { display:inline-block; font-size:11px; color:var(--brand); border:1px solid currentColor; border-radius:4px; padding:0 5px; margin-right:6px; vertical-align:1px; }
+  .example { font-size:14px; padding:8px 0; border-bottom:1px dashed var(--line); display:flex; gap:8px; align-items:flex-start; }
+  .example:last-child { border-bottom:none; }
+  .example .txt { flex:1; line-height:1.55; }
+  .empty { color:var(--muted); font-size:14px; text-align:center; padding:30px 0; }
+  .movie-tag { font-size:10px; color:#fff; background:#8746a8; border-radius:4px; padding:1px 5px; margin-left:6px; }
+  .err { color:#b02a37; font-size:14px; text-align:center; padding:16px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">🦜</div>
+    <div>
+      <h1>翻译鹦鹉</h1>
+      <div class="sub">中英互译 · 音标 · 发音 · 例句</div>
+    </div>
+  </header>
+
+  <div class="input-card">
+    <textarea id="q" placeholder="输入中文或英文…" autocomplete="off"></textarea>
+    <div class="lang-row">
+      <span class="lang" id="dirLabel">自动检测 → 自动</span>
+      <button type="button" class="swap" id="swap">⇄ 切换方向</button>
+    </div>
+    <button type="button" class="go" id="go">翻 译</button>
+  </div>
+
+  <div id="result"></div>
+</div>
+<script>
+window.API_TOKEN = "__API_TOKEN__";
+var dirMode = 'auto';
+var qEl = document.getElementById('q');
+var resultEl = document.getElementById('result');
+var dirLabel = document.getElementById('dirLabel');
+document.getElementById('swap').addEventListener('click', function () {
+  dirMode = dirMode === 'auto' ? 'en2zh' : (dirMode === 'en2zh' ? 'zh2en' : 'auto');
+  dirLabel.textContent = dirMode === 'auto' ? '自动检测 → 自动' : (dirMode === 'en2zh' ? '英语 → 中文' : '中文 → 英语');
+});
+function esc(s){var d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML;}
+function audioBtn(url){ return url ? '<button type="button" class="speak" onclick="new Audio(\''+url+'\').play()">🔊</button>' : ''; }
+function fromTo(){
+  if (dirMode==='en2zh') return ['en','zh-CN'];
+  if (dirMode==='zh2en') return ['zh-CN','en'];
+  return ['auto',''];
+}
+function render(d){
+  if(!d.ok){ resultEl.innerHTML='<div class="card"><div class="err">'+esc(d.error||'翻译失败')+'</div></div>'; return; }
+  var html = '<div class="card">';
+  html += '<div class="trans-main">' + esc(d.translation) + '</div>';
+  var ph = [];
+  if (d.term) ph.push('<span>' + esc(d.term) + (d.phonetic ? ' /' + esc(d.phonetic) + '/' : '') + '</span>');
+  ph.push(audioBtn(d.audio_en || ''));
+  if (d.audio_zh) ph.push('<span style="font-size:12px">中文</span>' + audioBtn(d.audio_zh));
+  if (ph.length) html += '<div class="phonetic-row">' + ph.join('') + '</div>';
+  if (d.meanings && d.meanings.length) {
+    html += '<div class="sec-title">常用含义</div>';
+    d.meanings.forEach(function(m){
+      html += '<div class="meaning">' + (m.pos?'<span class="pos">'+esc(m.pos)+'</span>':'') + esc(m.definition) + (m.zh?'<div style="color:var(--brand);font-size:13px;margin-top:2px">'+esc(m.zh)+'</div>':'') + (m.example?'<div style="color:var(--muted);font-size:13px;margin-top:2px">例：'+esc(m.example)+'</div>':'') + '</div>';
+    });
+  }
+  if (d.examples && d.examples.length) {
+    html += '<div class="sec-title">常用例句</div>';
+    d.examples.forEach(function(ex){
+      html += '<div class="example">' + audioBtn(ex.audio) + '<div class="txt">' + esc(ex.en) + (ex.zh?'<div style="color:var(--muted);font-size:13px;margin-top:2px">'+esc(ex.zh)+'</div>':'') + '</div></div>';
+    });
+  }
+  if (d.movie_examples && d.movie_examples.length) {
+    html += '<div class="sec-title">影视例句</div>';
+    d.movie_examples.forEach(function(ex){
+      html += '<div class="example">' + audioBtn(ex.audio) + '<div class="txt">' + esc(ex.en) + '<span class="movie-tag">' + esc(ex.source) + '</span></div></div>';
+    });
+  }
+  html += '</div>';
+  resultEl.innerHTML = html;
+}
+function translate(){
+  var q = qEl.value.trim();
+  if(!q) return;
+  resultEl.innerHTML = '<div class="card"><div class="empty">翻译中…</div></div>';
+  var ft = fromTo();
+  fetch('api/translate?q=' + encodeURIComponent(q) + '&from=' + ft[0] + '&to=' + ft[1] + '&token=' + encodeURIComponent(window.API_TOKEN || ''))
+    .then(function(r){ return r.json(); })
+    .then(render)
+    .catch(function(){ resultEl.innerHTML='<div class="card"><div class="err">网络错误，请重试</div></div>'; });
+}
+document.getElementById('go').addEventListener('click', translate);
+qEl.addEventListener('keydown', function(e){ if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) translate(); });
+</script>
+</body>
+</html>

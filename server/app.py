@@ -1,0 +1,134 @@
+"""Translator Web 服务：中英互译 API + 发音音频 + 简单网页界面。"""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from flask import Flask, request, jsonify, Response, abort
+
+import translate as engine
+
+APP_ROOT = Path(__file__).resolve().parents[1]
+API_TOKEN = os.environ.get("TRANSLATOR_API_TOKEN", "")
+app = Flask(__name__)
+app.config["JSON_AS_ASCII"] = False
+
+
+def _client_token() -> str:
+    return (
+        request.headers.get("X-Api-Token", "")
+        or request.args.get("token", "")
+        or ""
+    )
+
+
+def _authorized() -> bool:
+    if not API_TOKEN:
+        return True
+    return _client_token() == API_TOKEN
+
+
+@app.get("/health")
+def health():
+    return jsonify(ok=True)
+
+
+@app.get("/")
+def index():
+    html = (APP_ROOT / "static" / "index.html").read_text(encoding="utf-8")
+    html = html.replace("__API_TOKEN__", API_TOKEN)
+    return html
+
+
+@app.get("/api/translate")
+def api_translate():
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify(ok=False, error="empty query"), 400
+    if len(q) > 500:
+        q = q[:500]
+    sl = request.args.get("from") or "auto"
+    tl = request.args.get("to") or ""
+    try:
+        result = build_translation(q, sl, tl)
+        return jsonify(result)
+    except Exception as exc:  # noqa: BLE001
+        return jsonify(ok=False, error=f"translate failed: {exc}"), 502
+
+
+def build_translation(q: str, sl: str, tl: str) -> dict:
+    result = engine.smart_translate(q, sl=sl, tl=tl)
+    detected = result.get("detected") or sl
+    translation = result.get("translation") or ""
+    if not tl:
+        tl = "zh-CN" if detected.startswith("en") else "en"
+
+    if detected.startswith("en"):
+        en_text, zh_text = q, translation
+    else:
+        en_text, zh_text = translation, q
+
+    term = str(result.get("term") or "").strip()
+    phonetic = str(result.get("phonetic") or "").strip()
+    # 可选增强：词典 API 可达时补充真人音频
+    info = engine.dictionary_lookup(term) if term else None
+
+    def tts_url(text: str, lang: str) -> str:
+        if not text:
+            return ""
+        from urllib.parse import quote as _quote
+        suffix = f"&token={_client_token()}" if _client_token() else ""
+        return f"/api/tts?text={_quote(text[:180])}&lang={lang}{suffix}"
+
+    audio_en = tts_url(term or en_text, "en")
+    audio_zh = tts_url(zh_text, "zh-CN")
+
+    examples = []
+    for example in result.get("examples", [])[:5]:
+        en_sent = str(example.get("en") or "").strip()
+        if not en_sent:
+            continue
+        examples.append(
+            {
+                "en": en_sent,
+                "zh": str(example.get("zh") or "").strip(),
+                "audio": tts_url(en_sent, "en"),
+                "source": "llm",
+            }
+        )
+
+    return {
+        "ok": True,
+        "query": q,
+        "detected": detected,
+        "target": tl,
+        "translation": translation,
+        "term": term,
+        "phonetic": phonetic,
+        "audio_en": audio_en,
+        "audio_zh": audio_zh,
+        "meanings": result.get("meanings", []),
+        "examples": examples,
+        "movie_examples": [],
+    }
+
+
+@app.get("/api/tts")
+def api_tts():
+    if not _authorized():
+        abort(401)
+    text = (request.args.get("text") or "").strip()
+    lang = request.args.get("lang") or "en"
+    if not text or lang not in {"en", "zh-CN"} or len(text) > 200:
+        abort(400)
+    try:
+        data = engine.tts_bytes(text, lang)
+        return Response(data, mimetype="audio/mpeg")
+    except Exception:
+        abort(502)
+
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=int(os.environ.get("TRANSLATOR_PORT", "5030")))
