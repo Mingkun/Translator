@@ -431,6 +431,9 @@ def _history_db() -> sqlite3.Connection:
     return conn
 
 
+HISTORY_MAX_ROWS = 50000
+
+
 def record_history(q: str) -> None:
     q = q.strip()
     if not q or len(q) > 500:
@@ -440,6 +443,11 @@ def record_history(q: str) -> None:
             "INSERT INTO history (q, created_at) VALUES (?, ?) "
             "ON CONFLICT(q) DO UPDATE SET created_at = excluded.created_at",
             (q, time.time()),
+        )
+        conn.execute(
+            "DELETE FROM history WHERE q IN ("
+            "SELECT q FROM history ORDER BY created_at DESC LIMIT -1 OFFSET ?)",
+            (HISTORY_MAX_ROWS,),
         )
 
 
