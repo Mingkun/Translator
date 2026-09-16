@@ -452,7 +452,7 @@ def record_history(q: str) -> None:
 
 
 def load_history(limit: int = 50, offset: int = 0) -> dict:
-    limit = max(1, min(int(limit), 5000))
+    limit = max(1, min(int(limit), 50000))
     offset = max(0, int(offset))
     with _history_db() as conn:
         total = conn.execute("SELECT COUNT(*) FROM history").fetchone()[0]
