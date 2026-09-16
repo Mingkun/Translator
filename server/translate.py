@@ -451,13 +451,17 @@ def record_history(q: str) -> None:
         )
 
 
-def load_history(limit: int = 50) -> list[dict]:
+def load_history(limit: int = 50, offset: int = 0) -> dict:
+    limit = max(1, min(int(limit), 5000))
+    offset = max(0, int(offset))
     with _history_db() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM history").fetchone()[0]
         rows = conn.execute(
-            "SELECT q, created_at FROM history ORDER BY created_at DESC LIMIT ?",
-            (max(1, min(int(limit), 200)),),
+            "SELECT q, created_at FROM history ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (limit, offset),
         ).fetchall()
-    return [{"q": r[0], "created_at": r[1]} for r in rows]
+    items = [{"q": r[0], "created_at": r[1]} for r in rows]
+    return {"total": total, "items": items}
 
 def glm_full(q: str, model: str = "glm-5.3") -> dict | None:
     """GLM 备用引擎（单模型，由 smart_translate 编排调用顺序）。"""

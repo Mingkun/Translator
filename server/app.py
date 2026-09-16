@@ -170,11 +170,16 @@ def api_history():
     if not _authorized():
         return jsonify(ok=False, error="unauthorized"), 401
     limit = request.args.get("limit", "50")
+    offset = request.args.get("offset", "0")
     try:
         limit = int(limit)
     except ValueError:
         limit = 50
-    return jsonify(ok=True, items=engine.load_history(limit))
+    try:
+        offset = int(offset)
+    except ValueError:
+        offset = 0
+    return jsonify(ok=True, **engine.load_history(limit, offset))
 
 
 @app.get("/downloads/<path:name>")
