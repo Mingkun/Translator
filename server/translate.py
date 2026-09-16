@@ -322,30 +322,47 @@ _GOOGLE_RATE_LIMITED_UNTIL = 0.0
 
 
 def smart_translate(q: str, sl: str = "auto", tl: str = "") -> dict:
-    """主引擎 DeepSeek（全量），Google 免费接口兜底（纯翻译）。"""
+    """引擎链：deepseek → glm-5.3 → glm-5.1 → deepseek重试×2 → google → 报错。"""
     cache_key = f"smart3:{sl}:{tl}:{q}"
     cached = _cache_get(cache_key)
     if cached:
         return cached
+
+    def _try_deepseek() -> dict | None:
+        try:
+            r = deepseek_full(q)
+            if r and r.get("detected", "").startswith("zh"):
+                r["detected"] = "zh-CN"
+            return r
+        except Exception:
+            return None
+
+    def _try_glm(model: str) -> dict | None:
+        try:
+            r = glm_full(q, model=model)
+            if r and r.get("detected", "").startswith("zh"):
+                r["detected"] = "zh-CN"
+            return r
+        except Exception:
+            return None
+
     result = None
-    for attempt in range(3):
-        try:
-            result = deepseek_full(q)
-            if result and result.get("detected", "").startswith("zh"):
-                result["detected"] = "zh-CN"
-            break
-        except Exception:
-            result = None
-            if attempt < 2:
-                time.sleep(2.0 + attempt * 3.0)
-    # GLM 备用引擎（DeepSeek 限流/故障时兜底）
+    # 1) DeepSeek 首轮
+    result = _try_deepseek()
+    # 2) GLM-5.3
     if result is None:
-        try:
-            result = glm_full(q)
-            if result and result.get("detected", "").startswith("zh"):
-                result["detected"] = "zh-CN"
-        except Exception:
-            result = None
+        result = _try_glm("glm-5.3")
+    # 3) GLM-5.1
+    if result is None:
+        result = _try_glm("glm-5.1")
+    # 4) DeepSeek 重试2次（带退避）
+    if result is None:
+        for attempt in range(2):
+            time.sleep(2.0 + attempt * 2.0)
+            result = _try_deepseek()
+            if result:
+                break
+    # 5) Google 兜底
     if result is None:
         global _GOOGLE_RATE_LIMITED_UNTIL
         if time.time() > _GOOGLE_RATE_LIMITED_UNTIL:
@@ -355,19 +372,18 @@ def smart_translate(q: str, sl: str = "auto", tl: str = "") -> dict:
                 result = {
                     "translation": g.get("translation") or "",
                     "detected": g.get("detected") or sl,
-                    "term": "", "phonetic": "", "meanings": [], "examples": [],
+                    "term": "", "phonetic": "", "meanings": [], "examples": [], "movie_examples": [],
                 }
             except urllib.error.HTTPError as exc:
                 if exc.code == 429:
                     _GOOGLE_RATE_LIMITED_UNTIL = time.time() + 600
             except Exception:
                 pass
+    # 6) 仍失败则报错
     if not result or not result.get("translation"):
         raise RuntimeError("翻译服务暂时繁忙（限流），请稍等几秒重试；查过的词不受影响")
     _cache_set(cache_key, result)
     return result
-
-# ---------- 截图文字识别（GLM 视觉模型 OCR） ----------
 
 def _zai_key() -> str | None:
     import os
@@ -448,13 +464,13 @@ def load_history(limit: int = 50) -> list[dict]:
         ).fetchall()
     return [{"q": r[0], "created_at": r[1]} for r in rows]
 
-def glm_full(q: str) -> dict | None:
-    """GLM 备用引擎：DeepSeek 限流时兜底，依次尝试 glm-5.3 / glm-5.1。"""
+def glm_full(q: str, model: str = "glm-5.3") -> dict | None:
+    """GLM 备用引擎（单模型，由 smart_translate 编排调用顺序）。"""
     key = _zai_key()
     if not key:
         return None
     last_error: Exception | None = None
-    for model in ("glm-5.3", "glm-5.1"):
+    for model in (model,):
         payload = json.dumps(
             {
                 "model": model,
