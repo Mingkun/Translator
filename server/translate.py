@@ -477,22 +477,10 @@ def glm_full(q: str) -> dict | None:
             with urllib.request.urlopen(req, timeout=75) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
             content = str((data.get("choices") or [{}])[0].get("message", {}).get("content") or "")
-            cleaned = content.strip()
-            if cleaned.startswith("```"):
-                cleaned = cleaned.strip("` \n")
-                if cleaned.startswith("json"):
-                    cleaned = cleaned[4:]
-                cleaned = cleaned.strip()
-            start = cleaned.find("{")
-            end = cleaned.rfind("}")
-            parsed = None
-            if start >= 0 and end > start:
-                try:
-                    parsed = json.loads(cleaned[start:end + 1])
-                except json.JSONDecodeError:
-                    parsed = None
-            if not isinstance(parsed, dict):
-                parsed = {"translation": cleaned.strip()[:1000]}
+            parsed = _extract_json_object(content)
+            if parsed is None:
+                last_error = RuntimeError("glm json parse failed")
+                continue
             result = {
                 "translation": str(parsed.get("translation") or "").strip(),
                 "detected": str(parsed.get("detected") or "").strip() or "en",
@@ -509,5 +497,43 @@ def glm_full(q: str) -> dict | None:
             continue
     if last_error:
         raise last_error
+    return None
+
+def _extract_json_object(text: str) -> dict | None:
+    """括号配平提取首个完整 JSON 对象（容忍前后缀文本与换行）。"""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.strip("` \n")
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip()
+    start = text.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(text)):
+        ch = text[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == chr(34):
+                in_string = False
+            continue
+        if ch == chr(34):
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    parsed = json.loads(text[start:index + 1])
+                except json.JSONDecodeError:
+                    return None
+                return parsed if isinstance(parsed, dict) else None
     return None
 
