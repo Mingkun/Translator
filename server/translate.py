@@ -325,16 +325,16 @@ def smart_translate(q: str, sl: str = "auto", tl: str = "") -> dict:
     if cached:
         return cached
     result = None
-    for attempt in range(2):
+    for attempt in range(3):
         try:
             result = deepseek_full(q)
             if result and result.get("detected", "").startswith("zh"):
                 result["detected"] = "zh-CN"
             break
         except Exception:
-            if attempt == 0:
-                time.sleep(1.5)
             result = None
+            if attempt < 2:
+                time.sleep(2.0 + attempt * 3.0)
     if result is None:
         global _GOOGLE_RATE_LIMITED_UNTIL
         if time.time() > _GOOGLE_RATE_LIMITED_UNTIL:
@@ -352,7 +352,7 @@ def smart_translate(q: str, sl: str = "auto", tl: str = "") -> dict:
             except Exception:
                 pass
     if not result or not result.get("translation"):
-        raise RuntimeError("所有翻译引擎均不可用")
+        raise RuntimeError("翻译服务暂时繁忙（限流），请稍等几秒重试；查过的词不受影响")
     _cache_set(cache_key, result)
     return result
 
