@@ -251,7 +251,7 @@ def _deepseek_key() -> str | None:
 _TRANSLATE_SYSTEM_PROMPT = (
     "你是中英互译与词典引擎。对用户输入完成中英互译（若同时含中英文，把英文部分翻成中文、中文部分保留），并尽量给出词典信息。"
     '只输出 JSON：{"translation":"译文","detected":"en 或 zh-CN","term":"英文原词或英文译文核心词",'
-    '"phonetic":"term的IPA音标","meanings":[{"pos":"词性","definition":"英文释义","zh":"中文释义"}],'
+    '"phonetic":"term的美式发音IPA音标（General American，如 oʊ、ɑː、ɚ、t̬，不用英式 əʊ、ɒ、非儿化 r）","meanings":[{"pos":"词性","definition":"英文释义","zh":"中文释义"}],'
     '"examples":[{"en":"英文例句","zh":"例句中文翻译"}],"movie_examples":[{"en":"影视台词","zh":"台词中文翻译","source":"出处片名"}]}。'
     "meanings 给 3-6 条最常用含义；examples 给 3-5 个自然常用的例句；"
     'movie_examples 给 1-3 条该词/短语出现过的著名电影或美剧真实台词，格式 [{"en":"台词","zh":"台词中文翻译","source":"片名"}]，'
@@ -310,7 +310,7 @@ _GOOGLE_RATE_LIMITED_UNTIL = 0.0
 
 def smart_translate(q: str, sl: str = "auto", tl: str = "") -> dict:
     """引擎链：deepseek → glm-5.3 → glm-5.1 → deepseek重试×2 → google → 报错。"""
-    cache_key = f"smart4:{sl}:{tl}:{q}"
+    cache_key = f"smart5:{sl}:{tl}:{q}"
     cached = _cache_get(cache_key)
     if cached:
         return cached
