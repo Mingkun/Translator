@@ -276,7 +276,7 @@ def deepseek_full(q: str) -> dict | None:
             ],
             "response_format": {"type": "json_object"},
             "temperature": 0.2,
-            "max_tokens": 2500,
+            "max_tokens": 3000,
         }
     ).encode()
     req = urllib.request.Request(
@@ -288,22 +288,9 @@ def deepseek_full(q: str) -> dict | None:
     with urllib.request.urlopen(req, timeout=75) as resp:
         data = json.loads(resp.read().decode("utf-8"))
     content = str((data.get("choices") or [{}])[0].get("message", {}).get("content") or "")
-    parsed = None
-    cleaned = content.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.strip("` \n")
-        if cleaned.startswith("json"):
-            cleaned = cleaned[4:]
-        cleaned = cleaned.strip()
-    start = cleaned.find("{")
-    end = cleaned.rfind("}")
-    if start >= 0 and end > start:
-        try:
-            parsed = json.loads(cleaned[start:end + 1])
-        except json.JSONDecodeError:
-            parsed = None
-    if not isinstance(parsed, dict):
-        parsed = {"translation": cleaned.strip()[:1000]}
+    parsed = _extract_json_object(content)
+    if parsed is None:
+        raise RuntimeError("deepseek json parse failed")
     result = {
         "translation": str(parsed.get("translation") or "").strip(),
         "detected": str(parsed.get("detected") or "").strip() or "en",
@@ -323,7 +310,7 @@ _GOOGLE_RATE_LIMITED_UNTIL = 0.0
 
 def smart_translate(q: str, sl: str = "auto", tl: str = "") -> dict:
     """引擎链：deepseek → glm-5.3 → glm-5.1 → deepseek重试×2 → google → 报错。"""
-    cache_key = f"smart3:{sl}:{tl}:{q}"
+    cache_key = f"smart4:{sl}:{tl}:{q}"
     cached = _cache_get(cache_key)
     if cached:
         return cached
