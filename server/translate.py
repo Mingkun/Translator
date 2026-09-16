@@ -248,22 +248,25 @@ def _deepseek_key() -> str | None:
         return None
 
 
+_TRANSLATE_SYSTEM_PROMPT = (
+    "你是中英互译与词典引擎。对用户输入完成中英互译（若同时含中英文，把英文部分翻成中文、中文部分保留），并尽量给出词典信息。"
+    '只输出 JSON：{"translation":"译文","detected":"en 或 zh-CN","term":"英文原词或英文译文核心词",'
+    '"phonetic":"term的IPA音标","meanings":[{"pos":"词性","definition":"英文释义","zh":"中文释义"}],'
+    '"examples":[{"en":"英文例句","zh":"例句中文翻译"}],"movie_examples":[{"en":"影视台词","zh":"台词中文翻译","source":"出处片名"}]}。'
+    "meanings 给 3-6 条最常用含义；examples 给 3-5 个自然常用的例句；"
+    'movie_examples 给 1-3 条该词/短语出现过的著名电影或美剧真实台词，格式 [{"en":"台词","zh":"台词中文翻译","source":"片名"}]，'
+    "只引用你确定真实存在的著名台词并标注片名，没有合适的不确定就给空数组，严禁编造；"
+    "中文输入时 term 取英文译文的核心词；若输入是句子而非单词，term 与 phonetic 留空、"
+    "meanings 与 examples 与 movie_examples 留空数组。"
+)
+
+
 def deepseek_full(q: str) -> dict | None:
     """一次调用输出：译文 + 语言检测 + 词典词 + IPA音标 + 常用含义(带中文) + 常用例句(带中文)。"""
     key = _deepseek_key()
     if not key:
         return None
-    system = (
-        "你是中英互译与词典引擎。对用户输入完成中英互译（若同时含中英文，把英文部分翻成中文、中文部分保留），并尽量给出词典信息。"
-        '只输出 JSON：{"translation":"译文","detected":"en 或 zh-CN","term":"英文原词或英文译文核心词",'
-        '"phonetic":"term的IPA音标","meanings":[{"pos":"词性","definition":"英文释义","zh":"中文释义"}],'
-        '"examples":[{"en":"英文例句","zh":"例句中文翻译"}],"movie_examples":[{"en":"影视台词","zh":"台词中文翻译","source":"出处片名"}]}。'
-        "meanings 给 3-6 条最常用含义；examples 给 3-5 个自然常用的例句；"
-        'movie_examples 给 1-3 条该词/短语出现过的著名电影或美剧真实台词，格式 [{"en":"台词","zh":"台词中文翻译","source":"片名"}]，'
-        "只引用你确定真实存在的著名台词并标注片名，没有合适的不确定就给空数组，严禁编造；"
-        "中文输入时 term 取英文译文的核心词；若输入是句子而非单词，term 与 phonetic 留空、"
-        "meanings 与 examples 与 movie_examples 留空数组。"
-    )
+    system = _TRANSLATE_SYSTEM_PROMPT
     payload = json.dumps(
         {
             "model": "deepseek-flash",
@@ -335,6 +338,14 @@ def smart_translate(q: str, sl: str = "auto", tl: str = "") -> dict:
             result = None
             if attempt < 2:
                 time.sleep(2.0 + attempt * 3.0)
+    # GLM 备用引擎（DeepSeek 限流/故障时兜底）
+    if result is None:
+        try:
+            result = glm_full(q)
+            if result and result.get("detected", "").startswith("zh"):
+                result["detected"] = "zh-CN"
+        except Exception:
+            result = None
     if result is None:
         global _GOOGLE_RATE_LIMITED_UNTIL
         if time.time() > _GOOGLE_RATE_LIMITED_UNTIL:
@@ -436,3 +447,67 @@ def load_history(limit: int = 50) -> list[dict]:
             (max(1, min(int(limit), 200)),),
         ).fetchall()
     return [{"q": r[0], "created_at": r[1]} for r in rows]
+
+def glm_full(q: str) -> dict | None:
+    """GLM 备用引擎：DeepSeek 限流时兜底，依次尝试 glm-5.3 / glm-5.1。"""
+    key = _zai_key()
+    if not key:
+        return None
+    last_error: Exception | None = None
+    for model in ("glm-5.3", "glm-5.1"):
+        payload = json.dumps(
+            {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": _TRANSLATE_SYSTEM_PROMPT},
+                    {"role": "user", "content": q},
+                ],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.2,
+                "max_tokens": 2500,
+            }
+        ).encode()
+        req = urllib.request.Request(
+            "https://api.z.ai/api/coding/paas/v4/chat/completions",
+            data=payload,
+            method="POST",
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}", "User-Agent": UA},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=75) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            content = str((data.get("choices") or [{}])[0].get("message", {}).get("content") or "")
+            cleaned = content.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.strip("` \n")
+                if cleaned.startswith("json"):
+                    cleaned = cleaned[4:]
+                cleaned = cleaned.strip()
+            start = cleaned.find("{")
+            end = cleaned.rfind("}")
+            parsed = None
+            if start >= 0 and end > start:
+                try:
+                    parsed = json.loads(cleaned[start:end + 1])
+                except json.JSONDecodeError:
+                    parsed = None
+            if not isinstance(parsed, dict):
+                parsed = {"translation": cleaned.strip()[:1000]}
+            result = {
+                "translation": str(parsed.get("translation") or "").strip(),
+                "detected": str(parsed.get("detected") or "").strip() or "en",
+                "term": str(parsed.get("term") or "").strip(),
+                "phonetic": str(parsed.get("phonetic") or "").strip(),
+                "meanings": [m for m in (parsed.get("meanings") or []) if isinstance(m, dict)][:6],
+                "examples": [e for e in (parsed.get("examples") or []) if isinstance(e, dict)][:5],
+                "movie_examples": [e for e in (parsed.get("movie_examples") or []) if isinstance(e, dict) and e.get("en")][:3],
+            }
+            if result["translation"]:
+                return result
+        except Exception as exc:
+            last_error = exc
+            continue
+    if last_error:
+        raise last_error
+    return None
+
