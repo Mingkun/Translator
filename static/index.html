@@ -220,7 +220,8 @@ document.getElementById('histPlay').addEventListener('click', function () {
   this.textContent = '\u23F9 \u505C\u6B62';
   var idx = 0;
   function next() {
-    if (!histPlaying || idx >= items.length) { stopHistPlay(); return; }
+    if (!histPlaying) { stopHistPlay(); return; }
+    if (idx >= items.length) { idx = 0; }
     var el = items[idx];
     for (var k = 0; k < items.length; k++) items[k].style.background = '';
     el.style.background = '#fff3e8';
