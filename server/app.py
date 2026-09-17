@@ -179,7 +179,10 @@ def api_history():
         offset = int(offset)
     except ValueError:
         offset = 0
-    return jsonify(ok=True, **engine.load_history(limit, offset))
+    sort = request.args.get("sort", "time")
+    if sort not in {"time", "alpha"}:
+        sort = "time"
+    return jsonify(ok=True, **engine.load_history(limit, offset, sort))
 
 
 @app.get("/downloads/<path:name>")

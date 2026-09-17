@@ -426,9 +426,31 @@ def _history_db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=15)
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS history (q TEXT PRIMARY KEY, created_at REAL)"
+        "CREATE TABLE IF NOT EXISTS history (q TEXT PRIMARY KEY, created_at REAL, initial TEXT)"
     )
+    columns = [row[1] for row in conn.execute("PRAGMA table_info(history)")]
+    if "initial" not in columns:
+        conn.execute("ALTER TABLE history ADD COLUMN initial TEXT")
+    conn.execute("UPDATE history SET initial = NULL WHERE initial IS NULL AND q IS NOT NULL")
     return conn
+
+
+def _history_initial(q: str) -> str:
+    q = q.strip()
+    if not q:
+        return "#"
+    first = q[0]
+    if first.isascii() and first.isalpha():
+        return first.lower()
+    try:
+        from pypinyin import lazy_pinyin
+
+        py = lazy_pinyin(first)
+        if py and py[0] and py[0][0].isascii() and py[0][0].isalpha():
+            return py[0][0].lower()
+    except Exception:
+        pass
+    return "#"
 
 
 HISTORY_MAX_ROWS = 50000
@@ -438,12 +460,14 @@ def record_history(q: str) -> None:
     q = q.strip()
     if not q or len(q) > 500:
         return
+    initial = _history_initial(q)
     with _history_db() as conn:
         conn.execute(
-            "INSERT INTO history (q, created_at) VALUES (?, ?) "
-            "ON CONFLICT(q) DO UPDATE SET created_at = excluded.created_at",
-            (q, time.time()),
+            "INSERT INTO history (q, created_at, initial) VALUES (?, ?, ?) "
+            "ON CONFLICT(q) DO UPDATE SET created_at = excluded.created_at, initial = excluded.initial",
+            (q, time.time(), initial),
         )
+        conn.execute("UPDATE history SET initial = ? WHERE initial IS NULL", (initial,))
         conn.execute(
             "DELETE FROM history WHERE q IN ("
             "SELECT q FROM history ORDER BY created_at DESC LIMIT -1 OFFSET ?)",
@@ -451,13 +475,17 @@ def record_history(q: str) -> None:
         )
 
 
-def load_history(limit: int = 50, offset: int = 0) -> dict:
+def load_history(limit: int = 50, offset: int = 0, sort: str = "time") -> dict:
     limit = max(1, min(int(limit), 50000))
     offset = max(0, int(offset))
+    order_sql = (
+        "initial ASC, q COLLATE NOCASE ASC" if sort == "alpha" else "created_at DESC"
+    )
     with _history_db() as conn:
+        conn.execute("UPDATE history SET initial = COALESCE(initial, substr(upper(q),1,1)) WHERE initial IS NULL")
         total = conn.execute("SELECT COUNT(*) FROM history").fetchone()[0]
         rows = conn.execute(
-            "SELECT q, created_at FROM history ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            f"SELECT q, created_at FROM history ORDER BY {order_sql} LIMIT ? OFFSET ?",
             (limit, offset),
         ).fetchall()
     items = [{"q": r[0], "created_at": r[1]} for r in rows]

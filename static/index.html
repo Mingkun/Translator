@@ -66,6 +66,7 @@
     <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:70vh;display:flex;flex-direction:column;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <strong style="font-size:15px">🕘 查询历史</strong>
+        <button type="button" id="histSort" style="border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;color:#5a6472">排序：时间</button>
         <button type="button" id="historyClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
       </div>
       <div id="historyList" style="overflow:auto;flex:1"></div>
@@ -163,6 +164,7 @@ imgInput.addEventListener('change', function(){
 var historyOverlay = document.getElementById('historyOverlay');
 var historyList = document.getElementById('historyList');
 var histOffset = 0;
+var histSort = "time";
 var histTotal = 0;
 var HIST_PAGE = 50;
 function fmtTime(ts) {
@@ -197,6 +199,12 @@ function loadHistoryPage() {
 document.getElementById('historyBtn').addEventListener('click', function () {
   histOffset = 0;
   historyOverlay.style.display = 'flex';
+  loadHistoryPage();
+});
+document.getElementById('histSort').addEventListener('click', function () {
+  histSort = histSort === 'time' ? 'alpha' : 'time';
+  this.textContent = histSort === 'time' ? '排序：时间' : '排序：字母';
+  histOffset = 0;
   loadHistoryPage();
 });
 document.getElementById('histPrev').addEventListener('click', function () { if (histOffset > 0) { histOffset -= HIST_PAGE; loadHistoryPage(); } });
