@@ -68,6 +68,7 @@
         <strong style="font-size:15px">🕘 查询历史</strong>
         <button type="button" id="histSort" style="border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;color:#5a6472">排序：时间</button>
         <button type="button" id="histPlay" style="border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;color:#5a6472">▶ 连读</button>
+        <button type="button" id="histStop" style="display:none;border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;color:#b02a37">\u23F9 \u505C\u6B62</button>
         <button type="button" id="historyClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
       </div>
       <div id="historyList" style="overflow:auto;flex:1"></div>
@@ -205,15 +206,26 @@ document.getElementById('historyBtn').addEventListener('click', function () {
 });
 
 var histPlaying = false;
+var histPaused = false;
 var histPlayAudio = null;
+var histPlayTimer = null;
+var histCurrent = null;
+var histItems = [];
+var histIdx = 0;
 function histPlayUrl(text, lang) {
   return 'api/tts?text=' + encodeURIComponent(text) + '&lang=' + lang +  '&token=' + encodeURIComponent(window.API_TOKEN || '');
+}
+function histSchedule(fn, ms) {
+  histPlayTimer = setTimeout(function () { histPlayTimer = null; fn(); }, ms);
+}
+function histCancelTimer() {
+  if (histPlayTimer) { clearTimeout(histPlayTimer); histPlayTimer = null; }
 }
 function histPlaySound(url, onDone) {
   histPlayAudio = new Audio(url);
   histPlayAudio.onended = onDone;
-  histPlayAudio.onerror = function () { setTimeout(onDone, 400); };
-  histPlayAudio.play().catch(function () { setTimeout(onDone, 400); });
+  histPlayAudio.onerror = function () { if (histPlaying && !histPaused) histSchedule(onDone, 400); };
+  histPlayAudio.play().catch(function () { if (histPlaying && !histPaused) histSchedule(onDone, 400); });
 }
 function showExampleBar(word, pick) {
   var bar = document.getElementById('playExampleBar');
@@ -231,51 +243,89 @@ function hideExampleBar() {
 }
 function stopHistPlay() {
   histPlaying = false;
+  histPaused = false;
+  histCancelTimer();
   if (histPlayAudio) { try { histPlayAudio.pause(); } catch (e) {} histPlayAudio = null; }
+  histCurrent = null;
   document.getElementById('histPlay').textContent = '\u25B6 \u8FDE\u8BFB';
+  document.getElementById('histStop').style.display = 'none';
   hideExampleBar();
   var els = historyList.querySelectorAll('[data-q]');
   for (var i = 0; i < els.length; i++) els[i].style.background = '';
 }
+function pauseHistPlay() {
+  if (!histPlaying || histPaused) return;
+  histPaused = true;
+  histCancelTimer();
+  if (histPlayAudio) { try { histPlayAudio.pause(); } catch (e) {} }
+  document.getElementById('histPlay').textContent = '\u25B6 \u7EE7\u7EED';
+}
+function startCurrentWord() {
+  if (!histPlaying || histPaused) return;
+  if (!histCurrent) { stopHistPlay(); return; }
+  histPlaySound(histPlayUrl(histCurrent.word, histCurrent.lang), function () {
+    if (!histPlaying || histPaused) return;
+    playRandomExample(histCurrent.word, histNext);
+  });
+}
+function resumeHistPlay() {
+  if (!histPlaying || !histPaused) return;
+  histPaused = false;
+  document.getElementById('histPlay').textContent = '\u23F8 \u6682\u505C';
+  if (histPlayAudio && histPlayAudio.currentTime > 0 && !histPlayAudio.ended) {
+    histPlayAudio.play().catch(function () { startCurrentWord(); });
+  } else {
+    startCurrentWord();
+  }
+}
+function playRandomExample(word, done) {
+  var tu = 'api/translate?q=' + encodeURIComponent(word) + '&from=auto&to=&' + 'token=' + encodeURIComponent(window.API_TOKEN || '');
+  fetch(tu).then(function (r) { return r.json(); }).then(function (d) {
+    if (!histPlaying || histPaused) return;
+    var pool = (d && d.ok && d.examples && d.examples.length) ? d.examples : [];
+    if (!pool.length) { histSchedule(done, 2000); return; }
+    var pick = pool[Math.floor(Math.random() * pool.length)];
+    var exUrl = pick.audio || histPlayUrl(pick.en, 'en');
+    showExampleBar(word, pick);
+    histSchedule(function () {
+      if (!histPlaying || histPaused) return;
+      histPlaySound(exUrl, function () {
+        if (!histPlaying || histPaused) return;
+        histSchedule(done, 2000);
+      });
+    }, 2000);
+  }).catch(function () { if (histPlaying && !histPaused) histSchedule(done, 2000); });
+}
+function histNext() {
+  if (!histPlaying) { stopHistPlay(); return; }
+  if (histIdx >= histItems.length) { histIdx = 0; }
+  var el = histItems[histIdx];
+  for (var k = 0; k < histItems.length; k++) histItems[k].style.background = '';
+  el.style.background = '#fff3e8';
+  el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  var word = el.getAttribute('data-q') || '';
+  var lang = /[A-Za-z]/.test(word.charAt(0)) ? 'en' : 'zh-CN';
+  histCurrent = { word: word, lang: lang };
+  histIdx += 1;
+  histPlaySound(histPlayUrl(word, lang), function () {
+    if (!histPlaying || histPaused) return;
+    playRandomExample(word, histNext);
+  });
+}
 document.getElementById('histPlay').addEventListener('click', function () {
-  if (histPlaying) { stopHistPlay(); return; }
+  if (histPlaying && !histPaused) { pauseHistPlay(); return; }
+  if (histPlaying && histPaused) { resumeHistPlay(); return; }
   var items = Array.prototype.slice.call(historyList.querySelectorAll('[data-q]'));
   if (!items.length) return;
+  histItems = items;
+  histIdx = 0;
   histPlaying = true;
-  this.textContent = '\u23F9 \u505C\u6B62';
-  var idx = 0;
-  function playRandomExample(word, done) {
-    var tu = 'api/translate?q=' + encodeURIComponent(word) + '&from=auto&to=&' + 'token=' + encodeURIComponent(window.API_TOKEN || '');
-    fetch(tu).then(function (r) { return r.json(); }).then(function (d) {
-      if (!histPlaying) return;
-      var pool = (d && d.ok && d.examples && d.examples.length) ? d.examples : [];
-      if (!pool.length) { setTimeout(done, 2000); return; }
-      var pick = pool[Math.floor(Math.random() * pool.length)];
-      var exUrl = pick.audio || histPlayUrl(pick.en, 'en');
-      showExampleBar(word, pick);
-      setTimeout(function () {
-        if (!histPlaying) return;
-        histPlaySound(exUrl, function () { setTimeout(done, 2000); });
-      }, 2000);
-    }).catch(function () { setTimeout(done, 2000); });
-  }
-  function next() {
-    if (!histPlaying) { stopHistPlay(); return; }
-    if (idx >= items.length) { idx = 0; }
-    var el = items[idx];
-    for (var k = 0; k < items.length; k++) items[k].style.background = '';
-    el.style.background = '#fff3e8';
-    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    var word = el.getAttribute('data-q') || '';
-    var lang = /[A-Za-z]/.test(word.charAt(0)) ? 'en' : 'zh-CN';
-    idx += 1;
-    histPlaySound(histPlayUrl(word, lang), function () {
-      if (!histPlaying) return;
-      playRandomExample(word, next);
-    });
-  }
-  next();
+  histPaused = false;
+  this.textContent = '\u23F8 \u6682\u505C';
+  document.getElementById('histStop').style.display = '';
+  histNext();
 });
+document.getElementById('histStop').addEventListener('click', stopHistPlay);
 document.getElementById('histSort').addEventListener('click', function () {
   histSort = histSort === 'time' ? 'alpha' : 'time';
   this.textContent = histSort === 'time' ? '排序：时间' : '排序：字母';
