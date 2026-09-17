@@ -173,7 +173,7 @@ function fmtTime(ts) {
 }
 function loadHistoryPage() {
   historyList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
-  var u = 'api/history?limit=50&offset=' + histOffset + '&token=' + encodeURIComponent(window.API_TOKEN || '');
+  var u = 'api/history?limit=50&offset=' + histOffset + '&sort=' + histSort + '&token=' + encodeURIComponent(window.API_TOKEN || '');
   fetch(u)
     .then(function (r) { return r.json(); })
     .then(function (d) {
