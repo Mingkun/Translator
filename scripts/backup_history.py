@@ -48,6 +48,22 @@ def export_cache_snapshot() -> bool:
     return gz.is_file() and gz.stat().st_size > 0
 
 
+def sync_audio() -> int:
+    """把发音音频目录同步到备份仓库（只复制新文件，内容寻址文件不会变更）。"""
+    src_dir = Path("/work/Translator/data/audio")
+    dst_dir = DATA_DIR / "audio"
+    if not src_dir.is_dir():
+        return 0
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for item in src_dir.glob("*.mp3"):
+        dst = dst_dir / item.name
+        if not dst.is_file():
+            shutil.copyfile(item, dst)
+            copied += 1
+    return copied
+
+
 def git_push() -> bool:
     stamp = time.strftime("%Y-%m-%d %H:%M")
     cmds = [
@@ -67,8 +83,9 @@ def main() -> int:
     try:
         count = export_history()
         snapshot_ok = export_cache_snapshot()
+        audio_copied = sync_audio()
         pushed = git_push()
-        print(f"导出历史 {count} 条; 快照 {'OK' if snapshot_ok else '失败'}; 推送 {'OK' if pushed else '失败'}")
+        print(f"导出历史 {count} 条; 快照 {'OK' if snapshot_ok else '失败'}; 音频同步 {audio_copied} 个; 推送 {'OK' if pushed else '失败'}")
         return 0 if (snapshot_ok and pushed) else 1
     except Exception as exc:  # noqa: BLE001
         print("备份异常:", exc, file=sys.stderr)
