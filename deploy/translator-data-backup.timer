@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Translator data backup daily at 23:40
+
+[Timer]
+OnCalendar=*-*-* 23:40:00
+Persistent=true
+Unit=translator-data-backup.service
+
+[Install]
+WantedBy=timers.target

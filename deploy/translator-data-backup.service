@@ -1,0 +1,10 @@
+[Unit]
+Description=Translator data daily backup to TranslaterData repo
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /work/Translator/scripts/backup_history.py
+TimeoutStartSec=10m
