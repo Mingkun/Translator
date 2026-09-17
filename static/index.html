@@ -67,6 +67,7 @@
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <strong style="font-size:15px">🕘 查询历史</strong>
         <button type="button" id="histSort" style="border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;color:#5a6472">排序：时间</button>
+        <button type="button" id="histPlay" style="border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;color:#5a6472">▶ 连读</button>
         <button type="button" id="historyClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
       </div>
       <div id="historyList" style="overflow:auto;flex:1"></div>
@@ -201,6 +202,40 @@ document.getElementById('historyBtn').addEventListener('click', function () {
   historyOverlay.style.display = 'flex';
   loadHistoryPage();
 });
+
+var histPlaying = false;
+var histPlayAudio = null;
+function stopHistPlay() {
+  histPlaying = false;
+  if (histPlayAudio) { try { histPlayAudio.pause(); } catch (e) {} histPlayAudio = null; }
+  document.getElementById('histPlay').textContent = '\u25B6 \u8FDE\u8BFB';
+  var els = historyList.querySelectorAll('[data-q]');
+  for (var i = 0; i < els.length; i++) els[i].style.background = '';
+}
+document.getElementById('histPlay').addEventListener('click', function () {
+  if (histPlaying) { stopHistPlay(); return; }
+  var items = Array.prototype.slice.call(historyList.querySelectorAll('[data-q]'));
+  if (!items.length) return;
+  histPlaying = true;
+  this.textContent = '\u23F9 \u505C\u6B62';
+  var idx = 0;
+  function next() {
+    if (!histPlaying || idx >= items.length) { stopHistPlay(); return; }
+    var el = items[idx];
+    for (var k = 0; k < items.length; k++) items[k].style.background = '';
+    el.style.background = '#fff3e8';
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    var word = el.getAttribute('data-q') || '';
+    var lang = /[A-Za-z]/.test(word.charAt(0)) ? 'en' : 'zh-CN';
+    var u = 'api/tts?text=' + encodeURIComponent(word) + '&lang=' + lang +  '&token=' + encodeURIComponent(window.API_TOKEN || '');
+    histPlayAudio = new Audio(u);
+    histPlayAudio.onended = function () { if (histPlaying) setTimeout(next, 2000); };
+    histPlayAudio.onerror = function () { if (histPlaying) setTimeout(next, 600); };
+    histPlayAudio.play().catch(function () { if (histPlaying) setTimeout(next, 600); });
+    idx += 1;
+  }
+  next();
+});
 document.getElementById('histSort').addEventListener('click', function () {
   histSort = histSort === 'time' ? 'alpha' : 'time';
   this.textContent = histSort === 'time' ? '排序：时间' : '排序：字母';
@@ -209,8 +244,8 @@ document.getElementById('histSort').addEventListener('click', function () {
 });
 document.getElementById('histPrev').addEventListener('click', function () { if (histOffset > 0) { histOffset -= HIST_PAGE; loadHistoryPage(); } });
 document.getElementById('histNext').addEventListener('click', function () { if (histOffset + HIST_PAGE < histTotal) { histOffset += HIST_PAGE; loadHistoryPage(); } });
-document.getElementById('historyClose').addEventListener('click', function () { historyOverlay.style.display = 'none'; });
-historyOverlay.addEventListener('click', function (e) { if (e.target === historyOverlay) historyOverlay.style.display = 'none'; });
+document.getElementById('historyClose').addEventListener('click', function () { stopHistPlay(); historyOverlay.style.display = 'none'; });
+historyOverlay.addEventListener('click', function (e) { if (e.target === historyOverlay) { stopHistPlay(); historyOverlay.style.display = 'none'; } });
 historyList.addEventListener('click', function (e) {
   var item = e.target.closest('[data-q]');
   if (!item) return;
