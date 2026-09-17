@@ -82,6 +82,7 @@
     <a href="downloads/translator-android-debug.apk" style="color:#5a6472;font-size:13px;text-decoration:none">📱 安卓客户端下载</a>
   </div>
 </div>
+<div id="playExampleBar" style="display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom));width:min(560px,calc(100vw - 24px));background:#ffffff;border:1px solid #d9e0ea;border-radius:12px;box-shadow:0 8px 30px rgba(15,23,42,.18);padding:12px 14px;z-index:2500;box-sizing:border-box"></div>
 <script>
 window.API_TOKEN = "__API_TOKEN__";
 var dirMode = 'auto';
@@ -214,10 +215,25 @@ function histPlaySound(url, onDone) {
   histPlayAudio.onerror = function () { setTimeout(onDone, 400); };
   histPlayAudio.play().catch(function () { setTimeout(onDone, 400); });
 }
+function showExampleBar(word, pick) {
+  var bar = document.getElementById('playExampleBar');
+  if (!bar) return;
+  bar.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
+    '<span style="font-size:11px;color:#fff;background:#e8590c;border-radius:4px;padding:1px 7px">' + esc(word) + '</span>' +
+    '<span style="font-size:11px;color:#5a6472">\u4F8B\u53E5</span></div>' +
+    '<div style="font-size:15px;line-height:1.6;color:#1f2630">' + esc(pick.en) + '</div>' +
+    (pick.zh ? '<div style="font-size:13px;color:#5a6472;margin-top:3px;line-height:1.5">' + esc(pick.zh) + '</div>' : '');
+  bar.style.display = 'block';
+}
+function hideExampleBar() {
+  var bar = document.getElementById('playExampleBar');
+  if (bar) bar.style.display = 'none';
+}
 function stopHistPlay() {
   histPlaying = false;
   if (histPlayAudio) { try { histPlayAudio.pause(); } catch (e) {} histPlayAudio = null; }
   document.getElementById('histPlay').textContent = '\u25B6 \u8FDE\u8BFB';
+  hideExampleBar();
   var els = historyList.querySelectorAll('[data-q]');
   for (var i = 0; i < els.length; i++) els[i].style.background = '';
 }
@@ -236,6 +252,7 @@ document.getElementById('histPlay').addEventListener('click', function () {
       if (!pool.length) { setTimeout(done, 2000); return; }
       var pick = pool[Math.floor(Math.random() * pool.length)];
       var exUrl = pick.audio || histPlayUrl(pick.en, 'en');
+      showExampleBar(word, pick);
       setTimeout(function () {
         if (!histPlaying) return;
         histPlaySound(exUrl, function () { setTimeout(done, 2000); });
