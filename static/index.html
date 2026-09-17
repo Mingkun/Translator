@@ -205,6 +205,15 @@ document.getElementById('historyBtn').addEventListener('click', function () {
 
 var histPlaying = false;
 var histPlayAudio = null;
+function histPlayUrl(text, lang) {
+  return 'api/tts?text=' + encodeURIComponent(text) + '&lang=' + lang +  '&token=' + encodeURIComponent(window.API_TOKEN || '');
+}
+function histPlaySound(url, onDone) {
+  histPlayAudio = new Audio(url);
+  histPlayAudio.onended = onDone;
+  histPlayAudio.onerror = function () { setTimeout(onDone, 400); };
+  histPlayAudio.play().catch(function () { setTimeout(onDone, 400); });
+}
 function stopHistPlay() {
   histPlaying = false;
   if (histPlayAudio) { try { histPlayAudio.pause(); } catch (e) {} histPlayAudio = null; }
@@ -219,6 +228,20 @@ document.getElementById('histPlay').addEventListener('click', function () {
   histPlaying = true;
   this.textContent = '\u23F9 \u505C\u6B62';
   var idx = 0;
+  function playRandomExample(word, done) {
+    var tu = 'api/translate?q=' + encodeURIComponent(word) + '&from=auto&to=&' + 'token=' + encodeURIComponent(window.API_TOKEN || '');
+    fetch(tu).then(function (r) { return r.json(); }).then(function (d) {
+      if (!histPlaying) return;
+      var pool = (d && d.ok && d.examples && d.examples.length) ? d.examples : [];
+      if (!pool.length) { setTimeout(done, 2000); return; }
+      var pick = pool[Math.floor(Math.random() * pool.length)];
+      var exUrl = pick.audio || histPlayUrl(pick.en, 'en');
+      setTimeout(function () {
+        if (!histPlaying) return;
+        histPlaySound(exUrl, function () { setTimeout(done, 2000); });
+      }, 2000);
+    }).catch(function () { setTimeout(done, 2000); });
+  }
   function next() {
     if (!histPlaying) { stopHistPlay(); return; }
     if (idx >= items.length) { idx = 0; }
@@ -228,12 +251,11 @@ document.getElementById('histPlay').addEventListener('click', function () {
     el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     var word = el.getAttribute('data-q') || '';
     var lang = /[A-Za-z]/.test(word.charAt(0)) ? 'en' : 'zh-CN';
-    var u = 'api/tts?text=' + encodeURIComponent(word) + '&lang=' + lang +  '&token=' + encodeURIComponent(window.API_TOKEN || '');
-    histPlayAudio = new Audio(u);
-    histPlayAudio.onended = function () { if (histPlaying) setTimeout(next, 2000); };
-    histPlayAudio.onerror = function () { if (histPlaying) setTimeout(next, 600); };
-    histPlayAudio.play().catch(function () { if (histPlaying) setTimeout(next, 600); });
     idx += 1;
+    histPlaySound(histPlayUrl(word, lang), function () {
+      if (!histPlaying) return;
+      playRandomExample(word, next);
+    });
   }
   next();
 });
