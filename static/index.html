@@ -212,7 +212,7 @@ var histPlayTimer = null;
 var histCurrent = null;
 var histItems = [];
 var histIdx = 0;
-var histReplayPending = false;
+var histReplayCount = 0;
 var histClickTimer = null;
 function histPlayUrl(text, lang) {
   return 'api/tts?text=' + encodeURIComponent(text) + '&lang=' + lang +  '&token=' + encodeURIComponent(window.API_TOKEN || '');
@@ -241,9 +241,11 @@ function showExampleBar(word, pick) {
     '<span id="replayBadge" style="display:none;position:absolute;top:6px;right:8px;background:#e8590c;color:#fff;font-size:12px;font-weight:600;border-radius:10px;padding:1px 8px">+1</span>';
   bar.style.display = 'block';
 }
-function setReplayBadge(visible) {
+function setReplayBadge(count) {
   var b = document.getElementById('replayBadge');
-  if (b) b.style.display = visible ? 'block' : 'none';
+  if (!b) return;
+  if (count > 0) { b.textContent = '+' + count; b.style.display = 'block'; }
+  else { b.style.display = 'none'; }
 }
 function hideExampleBar() {
   var bar = document.getElementById('playExampleBar');
@@ -255,8 +257,8 @@ function stopHistPlay() {
   histCancelTimer();
   if (histPlayAudio) { try { histPlayAudio.pause(); } catch (e) {} histPlayAudio = null; }
   histCurrent = null;
-  histReplayPending = false;
-  setReplayBadge(false);
+  histReplayCount = 0;
+  setReplayBadge(0);
   if (histClickTimer) { clearTimeout(histClickTimer); histClickTimer = null; }
   document.getElementById('histPlay').textContent = '\u25B6 \u8FDE\u8BFB';
   document.getElementById('histStop').style.display = 'none';
@@ -298,22 +300,23 @@ function playRandomExample(word, done) {
     var pick = pool[Math.floor(Math.random() * pool.length)];
     var exUrl = pick.audio || histPlayUrl(pick.en, 'en');
     showExampleBar(word, pick);
+    function chainReplay() {
+      histSchedule(function () {
+        if (!histPlaying || histPaused) return;
+        histPlaySound(exUrl, function () {
+          if (!histPlaying || histPaused) return;
+          histReplayCount -= 1;
+          setReplayBadge(histReplayCount);
+          if (histReplayCount > 0) { chainReplay(); return; }
+          histSchedule(done, 2000);
+        });
+      }, 1000);
+    }
     histSchedule(function () {
       if (!histPlaying || histPaused) return;
       histPlaySound(exUrl, function () {
         if (!histPlaying || histPaused) return;
-        if (histReplayPending) {
-          histReplayPending = false;
-          histSchedule(function () {
-            if (!histPlaying || histPaused) return;
-            histPlaySound(exUrl, function () {
-              if (!histPlaying || histPaused) return;
-              setReplayBadge(false);
-              histSchedule(done, 2000);
-            });
-          }, 1000);
-          return;
-        }
+        if (histReplayCount > 0) { chainReplay(); return; }
         histSchedule(done, 2000);
       });
     }, 2000);
@@ -360,8 +363,8 @@ document.getElementById('playExampleBar').addEventListener('click', function () 
 document.getElementById('playExampleBar').addEventListener('dblclick', function () {
   if (histClickTimer) { clearTimeout(histClickTimer); histClickTimer = null; }
   if (!histPlaying) return;
-  histReplayPending = true;
-  setReplayBadge(true);
+  histReplayCount += 1;
+  setReplayBadge(histReplayCount);
   if (histPaused) { resumeHistPlay(); }
 });
 document.getElementById('histSort').addEventListener('click', function () {
