@@ -41,12 +41,12 @@ def index():
 
 
 def _translate_with_cache(q: str, sl: str, tl: str) -> dict:
-    """完整响应级缓存：查过的词直接秒回。"""
-    cache_key = f"resp:{sl}:{tl}:{q}"
+    """完整响应级缓存：查过的词直接秒回；大小写不敏感命中。"""
+    cache_key = f"resp:{sl}:{tl}:{q.strip().lower()}"
     cached = engine.cache_get(cache_key)
     if isinstance(cached, dict) and cached.get("ok"):
         engine.record_history(q)
-        return cached
+        return {**cached, "query": q}
     result = build_translation(q, sl, tl)
     engine.cache_set(cache_key, result)
     engine.record_history(q)

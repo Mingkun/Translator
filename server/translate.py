@@ -310,7 +310,7 @@ _GOOGLE_RATE_LIMITED_UNTIL = 0.0
 
 def smart_translate(q: str, sl: str = "auto", tl: str = "") -> dict:
     """引擎链：deepseek → glm-5.3 → glm-5.1 → deepseek重试×2 → google → 报错。"""
-    cache_key = f"smart5:{sl}:{tl}:{q}"
+    cache_key = f"smart5:{sl}:{tl}:{q.strip().lower()}"
     cached = _cache_get(cache_key)
     if cached:
         return cached
@@ -462,11 +462,16 @@ def record_history(q: str) -> None:
         return
     initial = _history_initial(q)
     with _history_db() as conn:
-        conn.execute(
-            "INSERT INTO history (q, created_at, initial) VALUES (?, ?, ?) "
-            "ON CONFLICT(q) DO UPDATE SET created_at = excluded.created_at, initial = excluded.initial",
-            (q, time.time(), initial),
-        )
+        updated = conn.execute(
+            "UPDATE history SET q = ?, created_at = ?, initial = ? WHERE lower(q) = lower(?)",
+            (q, time.time(), initial, q),
+        ).rowcount
+        if not updated:
+            conn.execute(
+                "INSERT INTO history (q, created_at, initial) VALUES (?, ?, ?) "
+                "ON CONFLICT(q) DO UPDATE SET created_at = excluded.created_at, initial = excluded.initial",
+                (q, time.time(), initial),
+            )
         conn.execute("UPDATE history SET initial = ? WHERE initial IS NULL", (initial,))
         conn.execute(
             "DELETE FROM history WHERE q IN ("
