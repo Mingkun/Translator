@@ -212,6 +212,8 @@ var histPlayTimer = null;
 var histCurrent = null;
 var histItems = [];
 var histIdx = 0;
+var histReplayPending = false;
+var histClickTimer = null;
 function histPlayUrl(text, lang) {
   return 'api/tts?text=' + encodeURIComponent(text) + '&lang=' + lang +  '&token=' + encodeURIComponent(window.API_TOKEN || '');
 }
@@ -247,6 +249,8 @@ function stopHistPlay() {
   histCancelTimer();
   if (histPlayAudio) { try { histPlayAudio.pause(); } catch (e) {} histPlayAudio = null; }
   histCurrent = null;
+  histReplayPending = false;
+  if (histClickTimer) { clearTimeout(histClickTimer); histClickTimer = null; }
   document.getElementById('histPlay').textContent = '\u25B6 \u8FDE\u8BFB';
   document.getElementById('histStop').style.display = 'none';
   hideExampleBar();
@@ -291,6 +295,17 @@ function playRandomExample(word, done) {
       if (!histPlaying || histPaused) return;
       histPlaySound(exUrl, function () {
         if (!histPlaying || histPaused) return;
+        if (histReplayPending) {
+          histReplayPending = false;
+          histSchedule(function () {
+            if (!histPlaying || histPaused) return;
+            histPlaySound(exUrl, function () {
+              if (!histPlaying || histPaused) return;
+              histSchedule(done, 2000);
+            });
+          }, 1000);
+          return;
+        }
         histSchedule(done, 2000);
       });
     }, 2000);
@@ -326,6 +341,20 @@ document.getElementById('histPlay').addEventListener('click', function () {
   histNext();
 });
 document.getElementById('histStop').addEventListener('click', stopHistPlay);
+document.getElementById('playExampleBar').addEventListener('click', function () {
+  if (!histPlaying) return;
+  if (histClickTimer) { clearTimeout(histClickTimer); histClickTimer = null; return; }
+  histClickTimer = setTimeout(function () {
+    histClickTimer = null;
+    if (histPaused) { resumeHistPlay(); } else { pauseHistPlay(); }
+  }, 260);
+});
+document.getElementById('playExampleBar').addEventListener('dblclick', function () {
+  if (histClickTimer) { clearTimeout(histClickTimer); histClickTimer = null; }
+  if (!histPlaying) return;
+  histReplayPending = true;
+  if (histPaused) { resumeHistPlay(); }
+});
 document.getElementById('histSort').addEventListener('click', function () {
   histSort = histSort === 'time' ? 'alpha' : 'time';
   this.textContent = histSort === 'time' ? '排序：时间' : '排序：字母';
