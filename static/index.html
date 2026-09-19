@@ -64,22 +64,6 @@
   </div>
 
   <div id="result" style="flex:1;overflow-y:auto;padding-bottom:8px"></div>
-
-  <div class="input-card">
-    <textarea id="q" placeholder="输入中文或英文…" autocomplete="off"></textarea>
-    <div class="lang-row">
-      <span class="lang" id="dirLabel">自动检测 → 自动</span>
-      <button type="button" class="swap" id="swap">⇄ 切换方向</button>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:10px">
-      <button type="button" class="go" id="go" style="flex:1">翻 译</button>
-      <button type="button" class="go" id="ocrBtn" style="width:64px;font-size:20px" title="截图翻译">📷</button>
-      <button type="button" class="go" id="historyBtn" style="width:64px;font-size:13px" title="历史">🕘 历史</button>
-    </div>
-    <input type="file" id="imgInput" accept="image/*" style="display:none">
-  </div>
-
-  <div id="result" style="flex:1;overflow-y:auto;padding-bottom:8px"></div>
   <div id="sysOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
   <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
