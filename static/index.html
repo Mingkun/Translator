@@ -102,6 +102,7 @@ function fromTo(){
   if (dirMode==='zh2en') return ['zh-CN','en'];
   return ['auto',''];
 }
+var lastAutoPlayUrl = null;
 function render(d){
   if(!d.ok){ resultEl.innerHTML='<div class="card"><div class="err">'+esc(d.error||'翻译失败')+'</div></div>'; return; }
   var html = '<div class="card">';
@@ -131,6 +132,11 @@ function render(d){
   }
   html += '</div>';
   resultEl.innerHTML = html;
+  if (d.ok && d.audio_en && d.audio_en !== lastAutoPlayUrl) {
+    lastAutoPlayUrl = d.audio_en;
+    var autoAudio = new Audio(d.audio_en);
+    autoAudio.play().catch(function(){});
+  }
 }
 function translate(){
   var q = qEl.value.trim();
