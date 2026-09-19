@@ -1,0 +1,11 @@
+{
+  "name": "translator",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^44.4.3",
+    "electron-packager": "^17.1.2"
+  }
+}
