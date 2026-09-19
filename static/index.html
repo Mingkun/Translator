@@ -45,6 +45,7 @@
       <h1>翻译鹦鹉</h1>
       <div class="sub">中英互译 · 音标 · 发音 · 例句</div>
     </div>
+    <button type="button" id="sysBtn" style="margin-left:auto;border:1px solid var(--line);background:#fff;border-radius:8px;width:36px;height:36px;font-size:18px;cursor:pointer;color:var(--text)">⚙</button>
   </header>
 
   <div class="input-card">
@@ -62,7 +63,26 @@
   </div>
 
   <div id="result"></div>
-  <div id="historyOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
+  <div id="sysOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
+  <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <strong style="font-size:15px">⚙ 系统</strong>
+      <button type="button" id="sysClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
+    </div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">客户端下载</div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <a href="downloads/translator-android-debug.apk" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--text);font-size:14px">
+        <span style="font-size:22px">📱</span>
+        <div><div>安卓客户端</div><div style="font-size:11px;color:var(--muted)">APK 安装包</div></div>
+      </a>
+      <a href="downloads/translator-windows-x64.zip" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--text);font-size:14px">
+        <span style="font-size:22px">💻</span>
+        <div><div>Windows 客户端</div><div style="font-size:11px;color:var(--muted)">ZIP 免安装绿色版</div></div>
+      </a>
+    </div>
+  </div>
+</div>
+<div id="historyOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
     <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <strong style="font-size:15px">🕘</strong>
@@ -80,9 +100,7 @@
       </div>
     </div>
   </div>
-  <div style="text-align:center;margin-top:18px">
-    <a href="downloads/translator-android-debug.apk" style="color:#5a6472;font-size:13px;text-decoration:none">📱 安卓客户端下载</a> &nbsp;·&nbsp; <a href="downloads/translator-windows-x64.zip" style="color:#5a6472;font-size:13px;text-decoration:none">💻 Windows客户端下载</a>
-  </div>
+
 </div>
 
 <script>
@@ -103,6 +121,10 @@ function fromTo(){
   return ['auto',''];
 }
 var lastAutoPlayUrl = null;
+var sysOverlay = document.getElementById('sysOverlay');
+document.getElementById('sysBtn').addEventListener('click', function () { sysOverlay.style.display = 'flex'; });
+document.getElementById('sysClose').addEventListener('click', function () { sysOverlay.style.display = 'none'; });
+sysOverlay.addEventListener('click', function (e) { if (e.target === sysOverlay) sysOverlay.style.display = 'none'; });
 function render(d){
   if(!d.ok){ resultEl.innerHTML='<div class="card"><div class="err">'+esc(d.error||'翻译失败')+'</div></div>'; return; }
   var html = '<div class="card">';
