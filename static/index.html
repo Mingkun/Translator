@@ -7,15 +7,16 @@
 <style>
   :root { --bg:#f7f9fc; --card:#ffffff; --text:#1f2630; --muted:#5a6472; --brand:#e8590c; --line:#dde4ec; }
   * { box-sizing: border-box; }
+  html, body { height:100%; }
   body { margin:0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background:var(--bg); color:var(--text); }
-  .wrap { max-width: 720px; margin: 0 auto; padding: 16px 14px calc(40px + env(safe-area-inset-bottom)); }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
   header { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
   header .logo { font-size:30px; }
   header h1 { font-size:19px; margin:0; }
   header .sub { font-size:12px; color:var(--muted); }
   .input-card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; box-shadow:0 2px 10px rgba(15,23,42,.04); }
   .row { display:flex; gap:8px; align-items:center; }
-  textarea { width:100%; min-height:88px; border:none; outline:none; resize:vertical; font-size:17px; background:transparent; color:var(--text); }
+  textarea { width:100%; min-height:56px;max-height:120px; border:none; outline:none; resize:vertical; font-size:17px; background:transparent; color:var(--text); }
   .lang-row { display:flex; gap:8px; align-items:center; justify-content:space-between; padding-top:8px; border-top:1px dashed var(--line); }
   .lang { font-size:13px; color:var(--muted); }
   .swap { border:1px solid var(--line); background:#fff; border-radius:8px; padding:5px 12px; font-size:13px; cursor:pointer; color:var(--text); }
@@ -62,7 +63,42 @@
     <input type="file" id="imgInput" accept="image/*" style="display:none">
   </div>
 
-  <div id="result"></div>
+  <div id="result" style="flex:1;overflow-y:auto;padding-bottom:8px"></div>
+
+  <div class="input-card">
+    <textarea id="q" placeholder="输入中文或英文…" autocomplete="off"></textarea>
+    <div class="lang-row">
+      <span class="lang" id="dirLabel">自动检测 → 自动</span>
+      <button type="button" class="swap" id="swap">⇄ 切换方向</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button type="button" class="go" id="go" style="flex:1">翻 译</button>
+      <button type="button" class="go" id="ocrBtn" style="width:64px;font-size:20px" title="截图翻译">📷</button>
+      <button type="button" class="go" id="historyBtn" style="width:64px;font-size:13px" title="历史">🕘 历史</button>
+    </div>
+    <input type="file" id="imgInput" accept="image/*" style="display:none">
+  </div>
+
+  <div id="result" style="flex:1;overflow-y:auto;padding-bottom:8px"></div>
+  <div id="sysOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
+  <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <strong style="font-size:15px">⚙ 系统</strong>
+      <button type="button" id="sysClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
+    </div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">客户端下载</div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <a href="downloads/translator-android-debug.apk" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--text);font-size:14px">
+        <span style="font-size:22px">📱</span>
+        <div><div>安卓客户端</div><div style="font-size:11px;color:var(--muted)">APK 安装包</div></div>
+      </a>
+      <a href="downloads/translator-windows-x64.zip" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--text);font-size:14px">
+        <span style="font-size:22px">💻</span>
+        <div><div>Windows 客户端</div><div style="font-size:11px;color:var(--muted)">ZIP 免安装绿色版</div></div>
+      </a>
+    </div>
+  </div>
+</div>
   <div id="sysOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
   <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
