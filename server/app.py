@@ -185,6 +185,24 @@ def api_history():
     return jsonify(ok=True, **engine.load_history(limit, offset, sort))
 
 
+@app.post("/api/history/delete")
+def api_history_delete():
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    payload = request.get_json(silent=True) or {}
+    q = str(payload.get("q") or "").strip()
+    if not q:
+        return jsonify(ok=False, error="缺少词条"), 400
+    import sqlite3
+    conn = sqlite3.connect(engine.DB_PATH, timeout=15)
+    try:
+        n = conn.execute("DELETE FROM history WHERE lower(q) = lower(?)", (q,)).rowcount
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify(ok=True, deleted=n)
+
+
 @app.get("/downloads/<path:name>")
 def downloads(name: str):
     import urllib.parse as _up

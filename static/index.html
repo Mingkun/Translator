@@ -267,7 +267,8 @@ function loadHistoryPage() {
         historyList.innerHTML = items.map(function (it) {
           return '<div data-q="' + esc(it.q) + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 8px;border-bottom:1px dashed #dde4ec;cursor:pointer">' +
             '<span style="font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(it.q) + '</span>' +
-            '<span style="font-size:11px;color:#5a6472;flex-shrink:0">' + esc(fmtTime(it.created_at)) + '</span></div>';
+            '<span style="font-size:11px;color:#5a6472;flex-shrink:0">' + esc(fmtTime(it.created_at)) + '</span>' +
+          '<button type="button" data-del="' + esc(it.q) + '" style="border:none;background:none;color:#c92a2a;font-size:15px;cursor:pointer;padding:0 4px;flex-shrink:0">×</button></div>';
         }).join('');
       }
       var page = Math.floor(histOffset / HIST_PAGE) + 1;
@@ -461,6 +462,18 @@ document.getElementById('histNext').addEventListener('click', function () { if (
 document.getElementById('historyClose').addEventListener('click', function () { stopHistPlay(); historyOverlay.style.display = 'none'; });
 historyOverlay.addEventListener('click', function (e) { if (e.target === historyOverlay) { stopHistPlay(); historyOverlay.style.display = 'none'; } });
 historyList.addEventListener('click', function (e) {
+  var delBtn = e.target.closest('[data-del]');
+  if (delBtn) {
+    var dq = delBtn.getAttribute('data-del');
+    if (!confirm('删除「' + dq + '」？')) return;
+    var fd = new FormData();
+    fetch('api/history/delete', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q: dq }) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (d.ok) loadHistoryPage(); else alert(d.error || '删除失败'); })
+      .catch(function () { alert('网络错误'); });
+    return;
+  }
+
   var item = e.target.closest('[data-q]');
   if (!item) return;
   historyOverlay.style.display = 'none';
