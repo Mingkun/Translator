@@ -141,6 +141,31 @@ function fromTo(){
   if (dirMode==='zh2en') return ['zh-CN','en'];
   return ['auto',''];
 }
+var CACHE_MAX = 50;
+var CACHE_PREFIX = 'tr_c_';
+var cacheKeys = [];
+try { cacheKeys = JSON.parse(localStorage.getItem('tr_cache_keys') || '[]'); } catch (e) { cacheKeys = []; }
+
+function cacheSave(q, data) {
+  var key = CACHE_PREFIX + q.trim().toLowerCase();
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+    cacheKeys = cacheKeys.filter(function (k) { return k !== key; });
+    cacheKeys.unshift(key);
+    while (cacheKeys.length > CACHE_MAX) {
+      var old = cacheKeys.pop();
+      localStorage.removeItem(old);
+    }
+    localStorage.setItem('tr_cache_keys', JSON.stringify(cacheKeys));
+  } catch (e) {}
+}
+
+function cacheLoad(q) {
+  var key = CACHE_PREFIX + q.trim().toLowerCase();
+  if (cacheKeys.indexOf(key) < 0) return null;
+  try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; }
+}
+
 var lastAutoPlayUrl = null;
 var sysOverlay = document.getElementById('sysOverlay');
 var playbackMode = localStorage.getItem('tr_playbackMode') || 'both';
@@ -213,12 +238,20 @@ function render(d){
 function translate(){
   var q = qEl.value.trim();
   if(!q) return;
-  resultEl.innerHTML = '<div class="card"><div class="empty">翻译中…</div></div>';
+  var cached = cacheLoad(q);
+  if (cached && cached.ok) {
+    render(cached);
+    resultEl.insertAdjacentHTML('afterbegin', '<div style="font-size:11px;color:#8a94a6;text-align:center;padding:2px 0 6px">缓存</div>');
+  } else {
+    resultEl.innerHTML = '<div class="card"><div class="empty">翻译中…</div></div>';
+  }
   var ft = fromTo();
   fetch('api/translate?q=' + encodeURIComponent(q) + '&from=' + ft[0] + '&to=' + ft[1] + '&token=' + encodeURIComponent(window.API_TOKEN || ''))
     .then(function(r){ return r.json(); })
-    .then(render)
-    .catch(function(){ resultEl.innerHTML='<div class="card"><div class="err">网络错误，请重试</div></div>'; });
+    .then(function(d){ if (d.ok) cacheSave(q, d); render(d); })
+    .catch(function(){
+      if (!cached || !cached.ok) resultEl.innerHTML = '<div class="card"><div class="err">网络错误，请重试</div></div>';
+    });
 }
 document.getElementById('go').addEventListener('click', translate);
 var imgInput = document.getElementById('imgInput');
