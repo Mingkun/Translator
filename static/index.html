@@ -14,13 +14,13 @@
   header .logo { font-size:30px; }
   header h1 { font-size:19px; margin:0; }
   header .sub { font-size:12px; color:var(--muted); }
-  .input-card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; box-shadow:0 2px 10px rgba(15,23,42,.04); }
+  .input-card { background:#fff; border:2px solid #c4d0e8; border-radius:14px; padding:14px; box-shadow:0 4px 16px rgba(15,23,42,.10); }
   .row { display:flex; gap:8px; align-items:center; }
-  textarea { width:100%; min-height:56px;max-height:120px; border:none; outline:none; resize:vertical; font-size:17px; background:transparent; color:var(--text); }
+  textarea { width:100%; min-height:56px; max-height:120px; border:none; outline:none; resize:vertical; font-size:18px; background:#f0f4fa; border-radius:10px; padding:10px 12px; color:var(--text); box-sizing:border-box; }
   .lang-row { display:flex; gap:8px; align-items:center; justify-content:space-between; padding-top:8px; border-top:1px dashed var(--line); }
   .lang { font-size:13px; color:var(--muted); }
   .swap { border:1px solid var(--line); background:#fff; border-radius:8px; padding:5px 12px; font-size:13px; cursor:pointer; color:var(--text); }
-  .go { width:100%; margin-top:10px; border:none; border-radius:10px; background:var(--brand); color:#fff; font-size:16px; padding:11px 0; cursor:pointer; }
+  .go { width:100%; margin-top:10px; border:none; border-radius:10px; background:var(--brand); color:#fff; font-size:16px; font-weight:600; padding:12px 0; cursor:pointer; box-shadow:0 2px 8px rgba(232,89,12,.3); }
   .go:active { opacity:.85; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-top:12px; box-shadow:0 2px 10px rgba(15,23,42,.04); }
   .trans-main { font-size:22px; font-weight:600; line-height:1.5; }
@@ -437,3 +437,4 @@ qEl.addEventListener('keydown', function(e){ if(e.key==='Enter' && (e.ctrlKey||e
 </script>
 </body>
 </html>
+<style>textarea::placeholder{color:#8a94a6}</style>
