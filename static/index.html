@@ -467,7 +467,8 @@ historyList.addEventListener('click', function (e) {
     var dq = delBtn.getAttribute('data-del');
     if (!confirm('删除「' + dq + '」？')) return;
     var fd = new FormData();
-    fetch('api/history/delete', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q: dq }) })
+    var delUrl = 'api/history/delete?token=' + encodeURIComponent(window.API_TOKEN || '');
+    fetch(delUrl, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q: dq }) })
       .then(function (r) { return r.json(); })
       .then(function (d) { if (d.ok) loadHistoryPage(); else alert(d.error || '删除失败'); })
       .catch(function () { alert('网络错误'); });
