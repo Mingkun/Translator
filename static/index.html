@@ -149,11 +149,11 @@ function render(d){
   if(!d.ok){ resultEl.innerHTML='<div class="card"><div class="err">'+esc(d.error||'翻译失败')+'</div></div>'; return; }
   var html = '<div class="card">';
   html += '<div class="trans-main">' + esc(d.translation) + '</div>';
-  var ph = [];
-  if (d.term) ph.push('<span>' + esc(d.term) + (d.phonetic ? ' /' + esc(d.phonetic) + '/' : '') + '</span>');
-  ph.push(audioBtn(d.audio_en || ''));
-  if (d.audio_zh) ph.push('<span style="font-size:12px">中文</span>' + audioBtn(d.audio_zh));
-  if (ph.length) html += '<div class="phonetic-row">' + ph.join('') + '</div>';
+  if (d.term) html += '<div class="phonetic-row"><span>' + esc(d.term) + (d.phonetic ? ' /' + esc(d.phonetic) + '/' : '') + '</span></div>';
+  var btns = [];
+  btns.push('<span style="font-size:12px">英文</span>' + audioBtn(d.audio_en || ''));
+  if (d.audio_zh) btns.push('<span style="font-size:12px">中文</span>' + audioBtn(d.audio_zh));
+  html += '<div style="display:flex;align-items:center;gap:14px;margin-top:4px">' + btns.join('') + '</div>';
   if (d.meanings && d.meanings.length) {
     html += '<div class="sec-title">常用含义</div>';
     d.meanings.forEach(function(m){
