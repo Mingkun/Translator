@@ -80,28 +80,25 @@
         <span style="font-size:22px">💻</span>
         <div><div>Windows 客户端</div><div style="font-size:11px;color:var(--muted)">ZIP 免安装绿色版</div></div>
       </a>
+    
+    <div style="font-size:13px;color:var(--muted);margin:14px 0 8px">播放设置</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px dashed var(--line);">
+      <span style="font-size:14px;">播放内容</span>
+      <div style="display:flex;gap:8px;">
+        <button type="button" id="playModeBoth" style="border:1px solid var(--line);background:#e8590c;color:#fff;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer">单词+例句</button>
+        <button type="button" id="playModeWord" style="border:1px solid var(--line);background:#fff;color:var(--text);border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer">仅单词</button>
+      </div>
     </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
+      <span style="font-size:14px;">连续播放条数</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <input type="number" id="playCount" min="1" max="200" value="20" style="width:64px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;text-align:center;">
+        <span style="font-size:12px;color:var(--muted)">条</span>
+      </div>
+    </div></div>
   </div>
 </div>
-  <div id="sysOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
-  <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:16px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <strong style="font-size:15px">⚙ 系统</strong>
-      <button type="button" id="sysClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
-    </div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">客户端下载</div>
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      <a href="downloads/translator-android-debug.apk" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--text);font-size:14px">
-        <span style="font-size:22px">📱</span>
-        <div><div>安卓客户端</div><div style="font-size:11px;color:var(--muted)">APK 安装包</div></div>
-      </a>
-      <a href="downloads/translator-windows-x64.zip" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--text);font-size:14px">
-        <span style="font-size:22px">💻</span>
-        <div><div>Windows 客户端</div><div style="font-size:11px;color:var(--muted)">ZIP 免安装绿色版</div></div>
-      </a>
-    </div>
-  </div>
-</div>
+  
 <div id="historyOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
     <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -142,6 +139,25 @@ function fromTo(){
 }
 var lastAutoPlayUrl = null;
 var sysOverlay = document.getElementById('sysOverlay');
+var playbackMode = localStorage.getItem('tr_playbackMode') || 'both';
+var playbackCount = parseInt(localStorage.getItem('tr_playbackCount') || '20', 10) || 20;
+function updatePlayModeUI() {
+  var b = document.getElementById('playModeBoth');
+  var w = document.getElementById('playModeWord');
+  if (!b || !w) return;
+  if (playbackMode === 'word') {
+    b.style.background = '#fff'; b.style.color = 'var(--text)';
+    w.style.background = '#e8590c'; w.style.color = '#fff';
+  } else {
+    b.style.background = '#e8590c'; b.style.color = '#fff';
+    w.style.background = '#fff'; w.style.color = 'var(--text)';
+  }
+}
+if (document.getElementById('playModeBoth')) document.getElementById('playModeBoth').addEventListener('click', function () { playbackMode = 'both'; localStorage.setItem('tr_playbackMode', 'both'); updatePlayModeUI(); });
+if (document.getElementById('playModeWord')) document.getElementById('playModeWord').addEventListener('click', function () { playbackMode = 'word'; localStorage.setItem('tr_playbackMode', 'word'); updatePlayModeUI(); });
+if (document.getElementById('playCount')) document.getElementById('playCount').addEventListener('change', function () { playbackCount = Math.max(1, Math.min(200, parseInt(this.value || '20', 10) || 20)); this.value = playbackCount; localStorage.setItem('tr_playbackCount', String(playbackCount)); });
+if (document.getElementById('playCount')) document.getElementById('playCount').value = playbackCount;
+updatePlayModeUI();
 document.getElementById('sysBtn').addEventListener('click', function () { sysOverlay.style.display = 'flex'; });
 document.getElementById('sysClose').addEventListener('click', function () { sysOverlay.style.display = 'none'; });
 sysOverlay.addEventListener('click', function (e) { if (e.target === sysOverlay) sysOverlay.style.display = 'none'; });
@@ -373,7 +389,7 @@ function playRandomExample(word, done) {
 }
 function histNext() {
   if (!histPlaying) { stopHistPlay(); return; }
-  if (histIdx >= histItems.length) { histIdx = 0; }
+  if (histIdx >= histItems.length || histIdx >= playbackCount) { stopHistPlay(); return; }
   var el = histItems[histIdx];
   for (var k = 0; k < histItems.length; k++) histItems[k].style.background = '';
   el.style.background = '#fff3e8';
@@ -384,6 +400,7 @@ function histNext() {
   histIdx += 1;
   histPlaySound(histPlayUrl(word, lang), function () {
     if (!histPlaying || histPaused) return;
+    if (playbackMode === 'word') { histSchedule(histNext, 2000); return; }
     playRandomExample(word, histNext);
   });
 }
@@ -392,7 +409,7 @@ document.getElementById('histPlay').addEventListener('click', function () {
   if (histPlaying && histPaused) { resumeHistPlay(); return; }
   var items = Array.prototype.slice.call(historyList.querySelectorAll('[data-q]'));
   if (!items.length) return;
-  histItems = items;
+  histItems = items.slice(0, playbackCount);
   histIdx = 0;
   histPlaying = true;
   histPaused = false;
