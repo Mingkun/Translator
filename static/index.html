@@ -95,6 +95,10 @@
         <input type="number" id="playCount" min="1" max="200" value="20" style="width:64px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;text-align:center;">
         <span style="font-size:12px;color:var(--muted)">条</span>
       </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
+      <span style="font-size:14px;">循环播放</span>
+      <button type="button" id="playLoop" style="border:1px solid var(--line);background:#fff;color:var(--text);border-radius:20px;padding:4px 18px;font-size:13px;cursor:pointer">关</button>
     </div></div>
   </div>
 </div>
@@ -141,6 +145,7 @@ var lastAutoPlayUrl = null;
 var sysOverlay = document.getElementById('sysOverlay');
 var playbackMode = localStorage.getItem('tr_playbackMode') || 'both';
 var playbackCount = parseInt(localStorage.getItem('tr_playbackCount') || '20', 10) || 20;
+var playbackLoop = localStorage.getItem('tr_playbackLoop') === 'true';
 function updatePlayModeUI() {
   var b = document.getElementById('playModeBoth');
   var w = document.getElementById('playModeWord');
@@ -157,6 +162,15 @@ if (document.getElementById('playModeBoth')) document.getElementById('playModeBo
 if (document.getElementById('playModeWord')) document.getElementById('playModeWord').addEventListener('click', function () { playbackMode = 'word'; localStorage.setItem('tr_playbackMode', 'word'); updatePlayModeUI(); });
 if (document.getElementById('playCount')) document.getElementById('playCount').addEventListener('change', function () { playbackCount = Math.max(1, Math.min(200, parseInt(this.value || '20', 10) || 20)); this.value = playbackCount; localStorage.setItem('tr_playbackCount', String(playbackCount)); });
 if (document.getElementById('playCount')) document.getElementById('playCount').value = playbackCount;
+if (document.getElementById('playLoop')) document.getElementById('playLoop').addEventListener('click', function () { playbackLoop = !playbackLoop; localStorage.setItem('tr_playbackLoop', String(playbackLoop)); updateLoopUI(); });
+function updateLoopUI() {
+  var b = document.getElementById('playLoop');
+  if (!b) return;
+  b.textContent = playbackLoop ? '开' : '关';
+  b.style.background = playbackLoop ? '#e8590c' : '#fff';
+  b.style.color = playbackLoop ? '#fff' : 'var(--text)';
+}
+updateLoopUI();
 updatePlayModeUI();
 document.getElementById('sysBtn').addEventListener('click', function () { sysOverlay.style.display = 'flex'; });
 document.getElementById('sysClose').addEventListener('click', function () { sysOverlay.style.display = 'none'; });
@@ -389,7 +403,10 @@ function playRandomExample(word, done) {
 }
 function histNext() {
   if (!histPlaying) { stopHistPlay(); return; }
-  if (histIdx >= histItems.length || histIdx >= playbackCount) { stopHistPlay(); return; }
+  var limit = Math.min(histItems.length, playbackCount);
+  if (histIdx >= limit) {
+    if (playbackLoop) { histIdx = 0; } else { stopHistPlay(); return; }
+  }
   var el = histItems[histIdx];
   for (var k = 0; k < histItems.length; k++) histItems[k].style.background = '';
   el.style.background = '#fff3e8';
