@@ -652,7 +652,7 @@ function histBadgeSet(q, n) {
   var el = histEntryEl(q);
   if (!el) return;
   var b = el.querySelector('[data-badge]');
-  if (b) b.textContent = n > 0 ? ('×' + n) : '';
+  if (b) b.textContent = n > 0 ? ('+' + n) : '';
 }
 function histStopSelAudio() {
   if (histSolo.timer) { clearTimeout(histSolo.timer); histSolo.timer = null; }
