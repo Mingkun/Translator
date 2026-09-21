@@ -636,6 +636,23 @@ function histSchedule(fn, ms) {
 function histCancelTimer() {
   if (histPlayTimer) { clearTimeout(histPlayTimer); histPlayTimer = null; }
 }
+var histListClickTimer = null;
+var histSelAudio = null;
+function histStopSelAudio() {
+  if (histSelAudio) { try { histSelAudio.pause(); } catch (e) {} histSelAudio = null; }
+}
+function histSetSelected(item) {
+  var els = historyList.querySelectorAll('[data-q]');
+  for (var i = 0; i < els.length; i++) els[i].style.borderLeft = els[i] === item ? '3px solid #e8590c' : '';
+}
+function histSelectPlay(item) {
+  histStopSelAudio();
+  histSetSelected(item);
+  var word = item.getAttribute('data-q') || '';
+  var lang = /[\u4e00-\u9fff]/.test(word) ? 'zh-CN' : 'en';
+  histSelAudio = new Audio(histPlayUrl(word, lang));
+  histSelAudio.play().catch(function () {});
+}
 function histPlaySound(url, onDone) {
   histPlayAudio = new Audio(url);
   histPlayAudio.onended = onDone;
@@ -665,6 +682,7 @@ function hideExampleBar() {
   if (bar) bar.style.display = 'none';
 }
 function stopHistPlay() {
+  histStopSelAudio();
   histPlaying = false;
   histPaused = false;
   histCancelTimer();
@@ -760,6 +778,7 @@ document.getElementById('histPlay').addEventListener('click', function () {
   if (histPlaying && histPaused) { resumeHistPlay(); return; }
   var items = Array.prototype.slice.call(historyList.querySelectorAll('[data-q]'));
   if (!items.length) return;
+  histStopSelAudio();
   histItems = items.slice(0, playbackCount);
   histIdx = 0;
   histPlaying = true;
@@ -820,6 +839,17 @@ historyList.addEventListener('click', function (e) {
 
   var item = e.target.closest('[data-q]');
   if (!item) return;
+  if (histListClickTimer) { clearTimeout(histListClickTimer); histListClickTimer = null; return; }
+  histListClickTimer = setTimeout(function () {
+    histListClickTimer = null;
+    histSelectPlay(item);
+  }, 260);
+});
+historyList.addEventListener('dblclick', function (e) {
+  var item = e.target.closest('[data-q]');
+  if (!item) return;
+  if (histListClickTimer) { clearTimeout(histListClickTimer); histListClickTimer = null; }
+  histStopSelAudio();
   historyOverlay.style.display = 'none';
   qEl.value = item.getAttribute('data-q') || '';
   translate();
