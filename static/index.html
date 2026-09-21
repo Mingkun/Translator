@@ -601,7 +601,8 @@ function loadHistoryPage() {
         historyList.innerHTML = items.map(function (it) {
           return '<div data-q="' + esc(it.q) + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 8px;border-bottom:1px dashed #dde4ec;cursor:pointer">' +
             '<span style="font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(it.q) + '</span>' +
-            '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;min-width:118px;justify-content:flex-end">' +
+            '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;justify-content:flex-end">' +
+            '<span data-badge="1" style="font-size:11px;color:#e8590c;font-weight:600;min-width:16px;text-align:right"></span>' +
             '<span style="font-size:11px;color:#5a6472">' + esc(fmtTime(it.created_at)) + '</span>' +
             '<button type="button" data-del="' + esc(it.q) + '" style="border:none;background:none;color:#c92a2a;font-size:15px;cursor:pointer;padding:0 4px">×</button></div></div>';
         }).join('');
@@ -639,23 +640,74 @@ function histCancelTimer() {
   if (histPlayTimer) { clearTimeout(histPlayTimer); histPlayTimer = null; }
 }
 var histListClickTimer = null;
-var histSelAudio = null;
 var histSelEl = null;
+var histClicks = 0;
+var histSolo = { q: '', count: 0, played: 0, audio: null, timer: null, playing: false };
+function histEntryEl(q) {
+  var els = historyList.querySelectorAll('[data-q]');
+  for (var i = 0; i < els.length; i++) if (els[i].getAttribute('data-q') === q) return els[i];
+  return null;
+}
+function histBadgeSet(q, n) {
+  var el = histEntryEl(q);
+  if (!el) return;
+  var b = el.querySelector('[data-badge]');
+  if (b) b.textContent = n > 0 ? ('×' + n) : '';
+}
 function histStopSelAudio() {
-  if (histSelAudio) { try { histSelAudio.pause(); } catch (e) {} histSelAudio = null; }
+  if (histSolo.timer) { clearTimeout(histSolo.timer); histSolo.timer = null; }
+  if (histSolo.audio) { try { histSolo.audio.pause(); } catch (e) {} }
+  var bq = histSolo.q;
+  histSolo = { q: '', count: 0, played: 0, audio: null, timer: null, playing: false };
+  if (bq) {
+    histBadgeSet(bq, 0);
+    var bel = histEntryEl(bq);
+    if (bel) bel.style.background = '';
+  }
+}
+function histSoloNext() {
+  if (!histSolo.playing) return;
+  if (histSolo.played >= histSolo.count) { histStopSelAudio(); return; }
+  var q = histSolo.q;
+  var lang = /[\u4e00-\u9fff]/.test(q) ? 'zh-CN' : 'en';
+  var els = historyList.querySelectorAll('[data-q]');
+  for (var k = 0; k < els.length; k++) els[k].style.background = '';
+  var el = histEntryEl(q);
+  if (el) el.style.background = '#fff3d6';
+  histBadgeSet(q, histSolo.count - histSolo.played);
+  var a = new Audio(histPlayUrl(q, lang));
+  histSolo.audio = a;
+  var adv = function () {
+    if (!histSolo.playing) return;
+    histSolo.played++;
+    if (histSolo.played >= histSolo.count) { histStopSelAudio(); return; }
+    histSolo.timer = setTimeout(function () { histSoloNext(); }, 1000);
+  };
+  a.onended = adv;
+  a.onerror = adv;
+  a.play().catch(adv);
 }
 function histSetSelected(item) {
   histSelEl = item;
   var els = historyList.querySelectorAll('[data-q]');
   for (var i = 0; i < els.length; i++) els[i].style.borderLeft = els[i] === item ? '3px solid #e8590c' : '';
 }
-function histSelectPlay(item) {
+function histSelectPlay(item, count) {
   histStopSelAudio();
   histSetSelected(item);
-  var word = item.getAttribute('data-q') || '';
-  var lang = /[\u4e00-\u9fff]/.test(word) ? 'zh-CN' : 'en';
-  histSelAudio = new Audio(histPlayUrl(word, lang));
-  histSelAudio.play().catch(function () {});
+  histSolo = { q: item.getAttribute('data-q') || '', count: count, played: 0, audio: null, timer: null, playing: true };
+  histSoloNext();
+}
+function histSelectAdd(item) {
+  var q = item.getAttribute('data-q') || '';
+  if (histSolo.q === q && histSolo.playing) { histSolo.count++; histBadgeSet(q, histSolo.count - histSolo.played); return; }
+  histSelectPlay(item, 2);
+}
+function histEnterTranslate(item) {
+  histStopSelAudio();
+  historyOverlay.style.display = 'none';
+  qEl.value = item.getAttribute('data-q') || '';
+  translate();
 }
 function histPlaySound(url, onDone) {
   histPlayAudio = new Audio(url);
@@ -845,20 +897,17 @@ historyList.addEventListener('click', function (e) {
 
   var item = e.target.closest('[data-q]');
   if (!item) return;
-  if (histListClickTimer) { clearTimeout(histListClickTimer); histListClickTimer = null; return; }
-  histListClickTimer = setTimeout(function () {
-    histListClickTimer = null;
-    histSelectPlay(item);
-  }, 260);
-});
-historyList.addEventListener('dblclick', function (e) {
-  var item = e.target.closest('[data-q]');
-  if (!item) return;
-  if (histListClickTimer) { clearTimeout(histListClickTimer); histListClickTimer = null; }
-  histStopSelAudio();
-  historyOverlay.style.display = 'none';
-  qEl.value = item.getAttribute('data-q') || '';
-  translate();
+  histClicks++;
+  if (histClicks === 1) {
+    histListClickTimer = setTimeout(function () { histListClickTimer = null; histClicks = 0; histSelectPlay(item, 1); }, 300);
+  } else if (histClicks === 2) {
+    if (histListClickTimer) { clearTimeout(histListClickTimer); histListClickTimer = null; }
+    histListClickTimer = setTimeout(function () { histListClickTimer = null; histClicks = 0; histSelectAdd(item); }, 300);
+  } else {
+    if (histListClickTimer) { clearTimeout(histListClickTimer); histListClickTimer = null; }
+    histClicks = 0;
+    histEnterTranslate(item);
+  }
 });
 qEl.addEventListener('keydown', function(e){ if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) translate(); });
 </script>
