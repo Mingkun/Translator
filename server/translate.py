@@ -166,7 +166,7 @@ def audio_id_for(kind: str, payload: str) -> str:
     return hashlib.sha1(f"{kind}:{payload}".encode("utf-8")).hexdigest()[:20]
 
 
-MALE_VOICES = {"en": "en-US-ChristopherNeural", "zh-CN": "zh-CN-YunxiNeural"}
+MALE_VOICES = {"en": "en-US-GuyNeural", "zh-CN": "zh-CN-YunxiNeural"}
 
 
 def tts_bytes(text: str, lang: str, voice: str = "", rate: str = "") -> bytes:
