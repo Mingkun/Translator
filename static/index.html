@@ -298,7 +298,7 @@ var mvItems = [];
 var mvIdx = 0;
 
 function mvSpeakUrl(text) {
-  return 'api/tts?text=' + encodeURIComponent(text) + '&lang=en&token=' + encodeURIComponent(window.API_TOKEN || '');
+  return 'api/tts?text=' + encodeURIComponent(text) + '&lang=en&voice=en-US-GuyNeural&rate=-10%25&token=' + encodeURIComponent(window.API_TOKEN || '');
 }
 function mvLoad() {
   movieList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';

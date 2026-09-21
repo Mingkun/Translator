@@ -289,10 +289,17 @@ def api_tts():
         abort(401)
     text = (request.args.get("text") or "").strip()
     lang = request.args.get("lang") or "en"
+    voice = (request.args.get("voice") or "").strip()
+    rate = (request.args.get("rate") or "").strip()
     if not text or lang not in {"en", "zh-CN"} or len(text) > 200:
         abort(400)
+    if voice and voice not in {"en-US-GuyNeural", "en-US-ChristopherNeural", "en-US-EricNeural", "en-US-AndrewNeural", "zh-CN-YunxiNeural", "zh-CN-YunyangNeural"}:
+        abort(400)
+    import re as _re
+    if rate and not _re.fullmatch(r"[+-][0-9]{1,2}%", rate):
+        abort(400)
     try:
-        data = engine.tts_bytes(text, lang)
+        data = engine.tts_bytes(text, lang, voice, rate)
         return Response(data, mimetype="audio/mpeg")
     except Exception:
         abort(502)

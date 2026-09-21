@@ -169,28 +169,29 @@ def audio_id_for(kind: str, payload: str) -> str:
 MALE_VOICES = {"en": "en-US-ChristopherNeural", "zh-CN": "zh-CN-YunxiNeural"}
 
 
-def tts_bytes(text: str, lang: str) -> bytes:
+def tts_bytes(text: str, lang: str, voice: str = "", rate: str = "") -> bytes:
     """优先 Edge TTS 男声；失败回退 Google TTS。缓存键含音色命名空间。"""
     try:
-        return _edge_tts_bytes(text, lang)
+        return _edge_tts_bytes(text, lang, voice, rate)
     except Exception:
         pass
     return _google_tts_bytes(text, lang)
 
 
-def _edge_tts_bytes(text: str, lang: str) -> bytes:
+def _edge_tts_bytes(text: str, lang: str, voice: str = "", rate: str = "") -> bytes:
     import asyncio
     import edge_tts
 
-    voice = MALE_VOICES.get(lang, "en-US-ChristopherNeural")
-    cache_id = audio_id_for("edge", f"{voice}:{text}")
+    voice = voice or MALE_VOICES.get(lang, "en-US-ChristopherNeural")
+    cache_id = audio_id_for("edge", f"{voice}:{rate}:{text}" if rate else f"{voice}:{text}")
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     path = AUDIO_DIR / f"{cache_id}.mp3"
     if path.is_file() and path.stat().st_size > 0:
         return path.read_bytes()
 
     async def _run() -> None:
-        communicate = edge_tts.Communicate(text[:180], voice)
+        kwargs = {"rate": rate} if rate else {}
+        communicate = edge_tts.Communicate(text[:180], voice, **kwargs)
         await communicate.save(str(path))
 
     asyncio.run(_run())
