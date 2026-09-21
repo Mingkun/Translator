@@ -322,8 +322,9 @@ function loadHistoryPage() {
         historyList.innerHTML = items.map(function (it) {
           return '<div data-q="' + esc(it.q) + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 8px;border-bottom:1px dashed #dde4ec;cursor:pointer">' +
             '<span style="font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(it.q) + '</span>' +
-            '<span style="font-size:11px;color:#5a6472;flex-shrink:0">' + esc(fmtTime(it.created_at)) + '</span>' +
-          '<button type="button" data-del="' + esc(it.q) + '" style="border:none;background:none;color:#c92a2a;font-size:15px;cursor:pointer;padding:0 4px;flex-shrink:0">×</button></div>';
+            '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;min-width:118px;justify-content:flex-end">' +
+            '<span style="font-size:11px;color:#5a6472">' + esc(fmtTime(it.created_at)) + '</span>' +
+            '<button type="button" data-del="' + esc(it.q) + '" style="border:none;background:none;color:#c92a2a;font-size:15px;cursor:pointer;padding:0 4px">×</button></div></div>';
         }).join('');
       }
       var page = Math.floor(histOffset / HIST_PAGE) + 1;
