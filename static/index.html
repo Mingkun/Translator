@@ -303,11 +303,72 @@ var mvAudio = null;
 var mvTimer = null;
 var mvItems = [];
 var mvIdx = 0;
+var mvClickTimer = null;
+var mvSolo = { id: 0, count: 0, played: 0, audio: null, timer: null, playing: false };
+function mvBadgeSet(id, n) {
+  var b = movieList.querySelector('[data-badge="' + id + '"]');
+  if (b) b.textContent = n > 0 ? ('×' + n) : '';
+}
+function mvSoloStop() {
+  if (mvSolo.timer) { clearTimeout(mvSolo.timer); mvSolo.timer = null; }
+  if (mvSolo.audio) { try { mvSolo.audio.pause(); } catch (e) {} }
+  var bid = mvSolo.id;
+  mvSolo = { id: 0, count: 0, played: 0, audio: null, timer: null, playing: false };
+  if (bid) mvBadgeSet(bid, 0);
+}
+function mvSoloPlay(id, count) {
+  mvStopPlay();
+  var item = null;
+  for (var i = 0; i < mvItems.length; i++) if (mvItems[i].id === id) { item = mvItems[i]; break; }
+  if (!item) return;
+  mvSoloStop();
+  mvSolo = { id: id, count: count, played: 0, audio: null, timer: null, playing: true };
+  mvSoloNext();
+}
+function mvSoloNext() {
+  if (!mvSolo.playing) return;
+  if (mvSolo.played >= mvSolo.count) { mvSoloStop(); return; }
+  var item = null;
+  for (var i = 0; i < mvItems.length; i++) if (mvItems[i].id === mvSolo.id) { item = mvItems[i]; break; }
+  if (!item) { mvSoloStop(); return; }
+  var els = movieList.querySelectorAll('[data-id]');
+  for (var k = 0; k < els.length; k++) els[k].style.background = '';
+  var el = movieList.querySelector('[data-id="' + mvSolo.id + '"]');
+  if (el) { el.style.background = '#fff3d6'; el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+  mvBadgeSet(mvSolo.id, mvSolo.count - mvSolo.played);
+  var a = new Audio(mvSpeakUrl(item.en));
+  mvSolo.audio = a;
+  var adv = function () {
+    if (!mvSolo.playing) return;
+    mvSolo.played++;
+    if (mvSolo.played >= mvSolo.count) { mvSoloStop(); return; }
+    mvSolo.timer = setTimeout(function () { mvSoloNext(); }, 1000);
+  };
+  a.onended = adv;
+  a.onerror = adv;
+  a.play().catch(adv);
+}
+movieList.addEventListener('click', function (e) {
+  var el = e.target && e.target.closest ? e.target.closest('[data-id]') : null;
+  if (!el) return;
+  var id = parseInt(el.getAttribute('data-id'), 10);
+  if (mvClickTimer) { clearTimeout(mvClickTimer); mvClickTimer = null; return; }
+  mvClickTimer = setTimeout(function () { mvClickTimer = null; mvSoloPlay(id, 1); }, 260);
+});
+movieList.addEventListener('dblclick', function (e) {
+  var el = e.target && e.target.closest ? e.target.closest('[data-id]') : null;
+  if (!el) return;
+  var id = parseInt(el.getAttribute('data-id'), 10);
+  if (mvClickTimer) { clearTimeout(mvClickTimer); mvClickTimer = null; }
+  if (mvSolo.id === id && mvSolo.playing) { mvSolo.count++; mvBadgeSet(id, mvSolo.count - mvSolo.played); return; }
+  mvSoloPlay(id, 2);
+});
 
 function mvSpeakUrl(text) {
   return 'api/tts?text=' + encodeURIComponent(text) + '&lang=en&voice=' + ttsVoiceFor('en') + '&rate=-10%25&token=' + encodeURIComponent(window.API_TOKEN || '');
 }
 function mvLoad() {
+  mvSoloStop();
   movieList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
   var u = 'api/movies?limit=200&token=' + encodeURIComponent(window.API_TOKEN || '');
   fetch(u, { credentials: 'same-origin' })
@@ -326,12 +387,13 @@ function mvLoad() {
         return '<div data-id="' + it.id + '" style="padding:8px 6px;border-bottom:1px dashed #dde4ec;cursor:pointer">' +
           '<div style="font-size:13px;line-height:1.5;color:#1f2630">' + esc(it.en) + '</div>' +
           (it.zh ? '<div style="font-size:12px;color:#5a6472;margin-top:2px">' + esc(it.zh) + '</div>' : '') +
-          '<div style="font-size:10px;color:#7048a8;margin-top:3px">《' + esc(it.source) + '》' + (it.word ? ' · ' + esc(it.word) : '') + '</div></div>';
+          '<div style="font-size:10px;color:#7048a8;margin-top:3px"><span data-badge="' + it.id + '" style="float:right;font-size:11px;color:#e8590c;font-weight:600"></span>《' + esc(it.source) + '》' + (it.word ? ' · ' + esc(it.word) : '') + '</div></div>';
       }).join('');
     })
     .catch(function () { movieList.innerHTML = '<div style="color:#b02a37;font-size:13px;text-align:center;padding:16px">加载失败</div>'; });
 }
 function mvStopPlay() {
+  mvSoloStop();
   mvPlaying = false; mvPaused = false;
   if (mvTimer) { clearTimeout(mvTimer); mvTimer = null; }
   if (mvAudio) { try { mvAudio.pause(); } catch (e) {} mvAudio = null; }
@@ -363,6 +425,7 @@ movieOverlay.addEventListener('click', function (e) { if (e.target === movieOver
 document.getElementById('mvPlay').addEventListener('click', function () {
   if (mvPlaying && !mvPaused) { mvPaused = true; if (mvTimer) { clearTimeout(mvTimer); mvTimer = null; } if (mvAudio) { try { mvAudio.pause(); } catch (e) {} } this.textContent = '▶ 继续'; return; }
   if (mvPlaying && mvPaused) { mvPaused = false; this.textContent = '⏸ 暂停'; if (mvAudio && mvAudio.currentTime > 0 && !mvAudio.ended) { mvAudio.play().catch(function () { mvNext(); }); } else { mvNext(); } return; }
+  mvSoloStop();
   mvPlaying = true; mvPaused = false; mvIdx = 0;
   this.textContent = '⏸ 暂停';
   document.getElementById('mvStop').style.display = '';
