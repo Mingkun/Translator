@@ -313,7 +313,7 @@ function mvSetSelected(id) {
 }
 function mvBadgeSet(id, n) {
   var b = movieList.querySelector('[data-badge="' + id + '"]');
-  if (b) b.textContent = n > 0 ? ('×' + n) : '';
+  if (b) b.textContent = n > 0 ? ('+' + n) : '';
 }
 function mvSoloStop() {
   if (mvSolo.timer) { clearTimeout(mvSolo.timer); mvSolo.timer = null; }
