@@ -586,6 +586,8 @@ function fmtTime(ts) {
 }
 var histFilter = '';
 function loadHistoryPage() {
+  histStopSelAudio();
+  histSelEl = null;
   historyList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
   var u = 'api/history?limit=50&filter=' + encodeURIComponent(histFilter) + '&offset=' + histOffset + '&sort=' + histSort + '&token=' + encodeURIComponent(window.API_TOKEN || '');
   fetch(u)
@@ -638,10 +640,12 @@ function histCancelTimer() {
 }
 var histListClickTimer = null;
 var histSelAudio = null;
+var histSelEl = null;
 function histStopSelAudio() {
   if (histSelAudio) { try { histSelAudio.pause(); } catch (e) {} histSelAudio = null; }
 }
 function histSetSelected(item) {
+  histSelEl = item;
   var els = historyList.querySelectorAll('[data-q]');
   for (var i = 0; i < els.length; i++) els[i].style.borderLeft = els[i] === item ? '3px solid #e8590c' : '';
 }
@@ -779,7 +783,9 @@ document.getElementById('histPlay').addEventListener('click', function () {
   var items = Array.prototype.slice.call(historyList.querySelectorAll('[data-q]'));
   if (!items.length) return;
   histStopSelAudio();
-  histItems = items.slice(0, playbackCount);
+  var startIdx = 0;
+  if (histSelEl) { var pos = items.indexOf(histSelEl); if (pos >= 0) startIdx = pos; }
+  histItems = items.slice(startIdx, startIdx + playbackCount);
   histIdx = 0;
   histPlaying = true;
   histPaused = false;
