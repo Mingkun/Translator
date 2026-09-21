@@ -305,6 +305,12 @@ var mvItems = [];
 var mvIdx = 0;
 var mvClickTimer = null;
 var mvSolo = { id: 0, count: 0, played: 0, audio: null, timer: null, playing: false };
+var mvSelectedId = 0;
+function mvSetSelected(id) {
+  mvSelectedId = id;
+  var els = movieList.querySelectorAll('[data-id]');
+  for (var i = 0; i < els.length; i++) els[i].style.borderLeft = els[i].getAttribute('data-id') === String(id) ? '3px solid #e8590c' : '';
+}
 function mvBadgeSet(id, n) {
   var b = movieList.querySelector('[data-badge="' + id + '"]');
   if (b) b.textContent = n > 0 ? ('×' + n) : '';
@@ -323,6 +329,7 @@ function mvSoloPlay(id, count) {
   if (!item) return;
   mvSoloStop();
   mvSolo = { id: id, count: count, played: 0, audio: null, timer: null, playing: true };
+  mvSetSelected(id);
   mvSoloNext();
 }
 function mvSoloNext() {
@@ -369,6 +376,7 @@ function mvSpeakUrl(text) {
 }
 function mvLoad() {
   mvSoloStop();
+  mvSelectedId = 0;
   movieList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
   var u = 'api/movies?limit=200&token=' + encodeURIComponent(window.API_TOKEN || '');
   fetch(u, { credentials: 'same-origin' })
@@ -426,7 +434,9 @@ document.getElementById('mvPlay').addEventListener('click', function () {
   if (mvPlaying && !mvPaused) { mvPaused = true; if (mvTimer) { clearTimeout(mvTimer); mvTimer = null; } if (mvAudio) { try { mvAudio.pause(); } catch (e) {} } this.textContent = '▶ 继续'; return; }
   if (mvPlaying && mvPaused) { mvPaused = false; this.textContent = '⏸ 暂停'; if (mvAudio && mvAudio.currentTime > 0 && !mvAudio.ended) { mvAudio.play().catch(function () { mvNext(); }); } else { mvNext(); } return; }
   mvSoloStop();
-  mvPlaying = true; mvPaused = false; mvIdx = 0;
+  var startIdx = 0;
+  if (mvSelectedId) { for (var si = 0; si < mvItems.length; si++) { if (mvItems[si].id === mvSelectedId) { startIdx = si; break; } } }
+  mvPlaying = true; mvPaused = false; mvIdx = startIdx;
   this.textContent = '⏸ 暂停';
   document.getElementById('mvStop').style.display = '';
   mvNext();
