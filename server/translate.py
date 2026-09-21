@@ -616,9 +616,9 @@ def fetch_realtime_quote(code: str) -> dict:
         return {
             "code": full,
             "name": parts[1],
-            "price": parts[3],
-            "change": parts[4],
-            "change_pct": parts[5],
+            "price": parts[4],
+            "change": parts[7],
+            "change_pct": parts[8],
         }
     return {
         "code": full,
