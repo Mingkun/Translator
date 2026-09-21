@@ -64,6 +64,7 @@
       <button type="button" class="go" id="go" style="flex:1">翻 译</button>
       <button type="button" class="go" id="ocrBtn" style="width:64px;font-size:20px" title="截图翻译">📷</button>
       <button type="button" class="go" id="historyBtn" style="width:64px;font-size:13px" title="历史">🕘 历史</button>
+      <button type="button" class="go" id="movieBtn" style="width:64px;font-size:13px" title="影视库">🎬 影视</button>
     </div>
     <input type="file" id="imgInput" accept="image/*" style="display:none">
   </div>
@@ -119,6 +120,19 @@
   </div>
 </div>
   
+<div id="movieOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
+  <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <strong style="font-size:15px">🎬</strong>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button type="button" id="mvPlay" style="border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;color:var(--text)">▶ 连读</button>
+        <button type="button" id="mvStop" style="display:none;border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;color:#b02a37">⏹</button>
+        <button type="button" id="movieClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
+      </div>
+    </div>
+    <div id="movieList" style="overflow:auto;flex:1"></div>
+  </div>
+</div>
 <div id="historyOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
     <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -273,6 +287,77 @@ if (document.getElementById('quoteInterval')) {
 }
 updateQuoteUI();
 startQuoteLoop();
+
+var movieOverlay = document.getElementById('movieOverlay');
+var movieList = document.getElementById('movieList');
+var mvPlaying = false;
+var mvPaused = false;
+var mvAudio = null;
+var mvTimer = null;
+var mvItems = [];
+var mvIdx = 0;
+
+function mvSpeakUrl(text) {
+  return 'api/tts?text=' + encodeURIComponent(text) + '&lang=en&token=***' + encodeURIComponent(window.API_TOKEN || '');
+}
+function mvLoad() {
+  movieList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
+  var u = 'api/movies?limit=200&token=***' + encodeURIComponent(window.API_TOKEN || '');
+  fetch(u, { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      mvItems = (d && d.items) || [];
+      if (!mvItems.length) {
+        movieList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">暂无影视台词（查词时自动收藏）</div>';
+        return;
+      }
+      movieList.innerHTML = mvItems.map(function (it) {
+        return '<div data-id="' + it.id + '" style="padding:8px 6px;border-bottom:1px dashed #dde4ec;cursor:pointer">' +
+          '<div style="font-size:13px;line-height:1.5;color:#1f2630">' + esc(it.en) + '</div>' +
+          (it.zh ? '<div style="font-size:12px;color:#5a6472;margin-top:2px">' + esc(it.zh) + '</div>' : '') +
+          '<div style="font-size:10px;color:#7048a8;margin-top:3px">《' + esc(it.source) + '》' + (it.word ? ' · ' + esc(it.word) : '') + '</div></div>';
+      }).join('');
+    })
+    .catch(function () { movieList.innerHTML = '<div style="color:#b02a37;font-size:13px;text-align:center;padding:16px">加载失败</div>'; });
+}
+function mvStopPlay() {
+  mvPlaying = false; mvPaused = false;
+  if (mvTimer) { clearTimeout(mvTimer); mvTimer = null; }
+  if (mvAudio) { try { mvAudio.pause(); } catch (e) {} mvAudio = null; }
+  document.getElementById('mvPlay').textContent = '▶ 连读';
+  document.getElementById('mvStop').style.display = 'none';
+  var els = movieList.querySelectorAll('[data-id]');
+  for (var i = 0; i < els.length; i++) els[i].style.background = '';
+}
+function mvNext() {
+  if (!mvPlaying || mvPaused) return;
+  if (mvIdx >= mvItems.length) { mvStopPlay(); return; }
+  var item = mvItems[mvIdx];
+  var els = movieList.querySelectorAll('[data-id]');
+  for (var k = 0; k < els.length; k++) els[k].style.background = '';
+  var el = movieList.querySelector('[data-id="' + item.id + '"]');
+  if (el) { el.style.background = '#f3e8ff'; el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+  mvIdx++;
+  mvAudio = new Audio(mvSpeakUrl(item.en));
+  mvAudio.onended = function () { if (mvPlaying && !mvPaused) mvTimer = setTimeout(mvNext, 2000); };
+  mvAudio.onerror = function () { if (mvPlaying && !mvPaused) mvTimer = setTimeout(mvNext, 600); };
+  mvAudio.play().catch(function () { if (mvPlaying && !mvPaused) mvTimer = setTimeout(mvNext, 600); });
+}
+document.getElementById('movieBtn').addEventListener('click', function () {
+  movieOverlay.style.display = 'flex';
+  mvLoad();
+});
+document.getElementById('movieClose').addEventListener('click', function () { mvStopPlay(); movieOverlay.style.display = 'none'; });
+movieOverlay.addEventListener('click', function (e) { if (e.target === movieOverlay) { mvStopPlay(); movieOverlay.style.display = 'none'; } });
+document.getElementById('mvPlay').addEventListener('click', function () {
+  if (mvPlaying && !mvPaused) { mvPaused = true; if (mvTimer) { clearTimeout(mvTimer); mvTimer = null; } if (mvAudio) { try { mvAudio.pause(); } catch (e) {} } this.textContent = '▶ 继续'; return; }
+  if (mvPlaying && mvPaused) { mvPaused = false; this.textContent = '⏸ 暂停'; if (mvAudio && mvAudio.currentTime > 0 && !mvAudio.ended) { mvAudio.play().catch(function () { mvNext(); }); } else { mvNext(); } return; }
+  mvPlaying = true; mvPaused = false; mvIdx = 0;
+  this.textContent = '⏸ 暂停';
+  document.getElementById('mvStop').style.display = '';
+  mvNext();
+});
+document.getElementById('mvStop').addEventListener('click', mvStopPlay);
 
 var lastAutoPlayUrl = null;
 var sysOverlay = document.getElementById('sysOverlay');

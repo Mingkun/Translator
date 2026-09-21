@@ -53,6 +53,28 @@ def _translate_with_cache(q: str, sl: str, tl: str) -> dict:
     return result
 
 
+def _save_movie_quotes(word: str, result: dict) -> None:
+    import sqlite3
+    movies = result.get("movie_examples") or []
+    if not movies:
+        return
+    conn = sqlite3.connect(engine.DB_PATH, timeout=15)
+    try:
+        for m in movies:
+            en = str(m.get("en") or "").strip()
+            if not en:
+                continue
+            conn.execute(
+                "INSERT OR IGNORE INTO movie_quotes (en, zh, source, word, created_at) VALUES (?,?,?,?,?)",
+                (en, str(m.get("zh") or ""), str(m.get("source") or ""), word, __import__("time").time()),
+            )
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+
 @app.get("/api/translate")
 def api_translate():
     if not _authorized():
@@ -66,6 +88,7 @@ def api_translate():
     tl = request.args.get("to") or ""
     try:
         result = _translate_with_cache(q, sl, tl)
+        _save_movie_quotes(q, result)
         return jsonify(result)
     except Exception as exc:  # noqa: BLE001
         return jsonify(ok=False, error=f"translate failed: {exc}"), 502
@@ -216,6 +239,35 @@ def api_quote():
         return jsonify(ok=True, **data)
     except Exception as exc:
         return jsonify(ok=False, error=str(exc)[:120]), 502
+
+
+@app.get("/api/movies")
+def api_movies():
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    import sqlite3
+    offset = request.args.get("offset", "0")
+    try:
+        offset = int(offset)
+    except ValueError:
+        offset = 0
+    limit = request.args.get("limit", "50")
+    try:
+        limit = min(int(limit), 5000)
+    except ValueError:
+        limit = 50
+    conn = sqlite3.connect(engine.DB_PATH, timeout=15)
+    conn.row_factory = sqlite3.Row
+    try:
+        total = conn.execute("SELECT COUNT(*) FROM movie_quotes").fetchone()[0]
+        rows = conn.execute(
+            "SELECT id, en, zh, source, word FROM movie_quotes ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
+        items = [{"id": r["id"], "en": r["en"], "zh": r["zh"], "source": r["source"], "word": r["word"]} for r in rows]
+    finally:
+        conn.close()
+    return jsonify(ok=True, items=items, total=total)
 
 
 @app.get("/downloads/<path:name>")
