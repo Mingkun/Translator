@@ -463,11 +463,41 @@ var newsAudio = null;
 var newsPlaying = false;
 var newsPaused = false;
 var newsDate = '';
+var newsSents = [];
+var newsStarts = null;
+var newsCurIdx = -1;
+function newsClearHi() {
+  for (var i = 0; i < newsSents.length; i++) { newsSents[i].style.background = ''; }
+  newsCurIdx = -1;
+}
+function newsHi(k) {
+  if (k === newsCurIdx) return;
+  if (k < 0 || k >= newsSents.length) { newsClearHi(); return; }
+  for (var i = 0; i < newsSents.length; i++) newsSents[i].style.background = '';
+  newsSents[k].style.background = '#fff3d6';
+  try { newsSents[k].scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
+  newsCurIdx = k;
+}
+function newsSplitSentences(text) {
+  var t = text.replace(/\s+/g, ' ').trim();
+  var out = [], cur = '';
+  for (var i = 0; i < t.length; i++) {
+    cur += t.charAt(i);
+    var c = t.charCodeAt(i);
+    if ((c === 46 || c === 33 || c === 63) && (i + 1 >= t.length || t.charAt(i + 1) === ' ')) {
+      if (cur.trim().length > 2) { out.push(cur.trim()); cur = ''; }
+    }
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
 function newsStopPlay() {
   newsPlaying = false; newsPaused = false;
   if (newsAudio) { try { newsAudio.pause(); } catch (e) {} newsAudio = null; }
   document.getElementById('newsPlay').textContent = '▶ 播放';
   document.getElementById('newsStop').style.display = 'none';
+  newsClearHi();
+  newsStarts = null;
 }
 function newsLoad() {
   newsStopPlay();
@@ -481,10 +511,16 @@ function newsLoad() {
         return;
       }
       newsDate = d.date;
+      var sents = newsSplitSentences(d.text || '');
       newsBody.innerHTML =
         '<div style="font-size:15px;font-weight:600;line-height:1.5;color:#1f2630">' + esc(d.title) + '</div>' +
         '<div style="font-size:11px;color:#5a6472;margin:4px 0 10px">' + esc(d.date) + ' · <a href="' + esc(d.url) + '" target="_blank" style="color:#7048a8">CNN 原文</a></div>' +
-        '<div style="font-size:14px;line-height:1.8;color:#1f2630">' + esc(d.text) + '</div>';
+        '<div id="newsText" style="font-size:14px;line-height:1.8;color:#1f2630">' + sents.map(function (s) {
+          return '<span data-ns="1" style="border-radius:3px">' + esc(s) + '</span> ';
+        }).join('') + '</div>';
+      newsSents = Array.prototype.slice.call(newsBody.querySelectorAll('[data-ns]'));
+      newsStarts = null;
+      newsClearHi();
     })
     .catch(function () { newsBody.innerHTML = '<div style="color:#b02a37;font-size:13px;text-align:center;padding:16px">加载失败</div>'; });
 }
@@ -504,6 +540,22 @@ document.getElementById('newsPlay').addEventListener('click', function () {
   newsAudio = new Audio('api/news/audio?date=' + encodeURIComponent(newsDate) + '&token=' + encodeURIComponent(window.API_TOKEN || ''));
   newsAudio.onended = newsStopPlay;
   newsAudio.onerror = newsStopPlay;
+  newsAudio.addEventListener('loadedmetadata', function () {
+    var dur = newsAudio && isFinite(newsAudio.duration) ? newsAudio.duration : 0;
+    if (!dur || !newsSents.length) { newsStarts = null; return; }
+    var total = 0, k;
+    for (k = 0; k < newsSents.length; k++) total += newsSents[k].textContent.length;
+    var starts = [], acc = 0;
+    for (k = 0; k < newsSents.length; k++) { starts.push(dur * acc / total); acc += newsSents[k].textContent.length; }
+    newsStarts = starts;
+  });
+  newsAudio.addEventListener('timeupdate', function () {
+    if (!newsPlaying || newsPaused || !newsStarts || !newsAudio) return;
+    var t = newsAudio.currentTime + 0.35;
+    var k = -1, j;
+    for (j = 0; j < newsStarts.length; j++) { if (t >= newsStarts[j]) k = j; }
+    newsHi(k);
+  });
   newsAudio.play().catch(function () { newsStopPlay(); });
 });
 document.getElementById('newsStop').addEventListener('click', newsStopPlay);
