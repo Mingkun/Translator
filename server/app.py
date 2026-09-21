@@ -293,7 +293,7 @@ def api_tts():
     rate = (request.args.get("rate") or "").strip()
     if not text or lang not in {"en", "zh-CN"} or len(text) > 200:
         abort(400)
-    if voice and voice not in {"en-US-GuyNeural", "en-US-ChristopherNeural", "en-US-EricNeural", "en-US-AndrewNeural", "zh-CN-YunxiNeural", "zh-CN-YunyangNeural"}:
+    if voice and voice not in {"en-US-GuyNeural", "en-US-ChristopherNeural", "en-US-EricNeural", "en-US-AndrewNeural", "en-US-AriaNeural", "en-US-JennyNeural", "zh-CN-YunxiNeural", "zh-CN-YunyangNeural", "zh-CN-XiaoxiaoNeural", "zh-CN-XiaoyiNeural"}:
         abort(400)
     import re as _re
     if rate and not _re.fullmatch(r"[+-][0-9]{1,2}%", rate):

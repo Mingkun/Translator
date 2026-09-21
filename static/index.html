@@ -107,6 +107,13 @@
       </div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
+      <span style="font-size:14px;">发音音色</span>
+      <div style="display:flex;gap:8px;">
+        <button type="button" id="voiceMale" style="border:1px solid var(--line);background:#e8590c;color:#fff;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer">男声</button>
+        <button type="button" id="voiceFemale" style="border:1px solid var(--line);background:#fff;color:var(--text);border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer">女声</button>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
       <span style="font-size:14px;">连续播放条数</span>
       <div style="display:flex;align-items:center;gap:8px;">
         <input type="number" id="playCount" min="1" max="200" value="20" style="width:64px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;text-align:center;">
@@ -298,7 +305,7 @@ var mvItems = [];
 var mvIdx = 0;
 
 function mvSpeakUrl(text) {
-  return 'api/tts?text=' + encodeURIComponent(text) + '&lang=en&voice=en-US-GuyNeural&rate=-10%25&token=' + encodeURIComponent(window.API_TOKEN || '');
+  return 'api/tts?text=' + encodeURIComponent(text) + '&lang=en&voice=' + ttsVoiceFor('en') + '&rate=-10%25&token=' + encodeURIComponent(window.API_TOKEN || '');
 }
 function mvLoad() {
   movieList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
@@ -368,6 +375,26 @@ var sysOverlay = document.getElementById('sysOverlay');
 var playbackMode = localStorage.getItem('tr_playbackMode') || 'both';
 var playbackCount = parseInt(localStorage.getItem('tr_playbackCount') || '20', 10) || 20;
 var playbackLoop = localStorage.getItem('tr_playbackLoop') === 'true';
+var voiceGender = localStorage.getItem('tr_voiceGender') || 'male';
+function ttsVoiceFor(lang) {
+  if (voiceGender === 'female') return lang === 'en' ? 'en-US-AriaNeural' : 'zh-CN-XiaoxiaoNeural';
+  return lang === 'en' ? 'en-US-GuyNeural' : 'zh-CN-YunxiNeural';
+}
+function updateVoiceGenderUI() {
+  var m = document.getElementById('voiceMale');
+  var f = document.getElementById('voiceFemale');
+  if (!m || !f) return;
+  if (voiceGender === 'female') {
+    m.style.background = '#fff'; m.style.color = 'var(--text)';
+    f.style.background = '#e8590c'; f.style.color = '#fff';
+  } else {
+    m.style.background = '#e8590c'; m.style.color = '#fff';
+    f.style.background = '#fff'; f.style.color = 'var(--text)';
+  }
+}
+if (document.getElementById('voiceMale')) document.getElementById('voiceMale').addEventListener('click', function () { voiceGender = 'male'; localStorage.setItem('tr_voiceGender', 'male'); updateVoiceGenderUI(); });
+if (document.getElementById('voiceFemale')) document.getElementById('voiceFemale').addEventListener('click', function () { voiceGender = 'female'; localStorage.setItem('tr_voiceGender', 'female'); updateVoiceGenderUI(); });
+updateVoiceGenderUI();
 function updatePlayModeUI() {
   var b = document.getElementById('playModeBoth');
   var w = document.getElementById('playModeWord');
@@ -528,7 +555,7 @@ var histIdx = 0;
 var histReplayCount = 0;
 var histClickTimer = null;
 function histPlayUrl(text, lang) {
-  return 'api/tts?text=' + encodeURIComponent(text) + '&lang=' + lang +  '&token=' + encodeURIComponent(window.API_TOKEN || '');
+  return 'api/tts?text=' + encodeURIComponent(text) + '&lang=' + lang + '&voice=' + ttsVoiceFor(lang) + '&token=' + encodeURIComponent(window.API_TOKEN || '');
 }
 function histSchedule(fn, ms) {
   histPlayTimer = setTimeout(function () { histPlayTimer = null; fn(); }, ms);
