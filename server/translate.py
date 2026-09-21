@@ -480,7 +480,7 @@ def record_history(q: str) -> None:
         )
 
 
-def load_history(limit: int = 50, offset: int = 0, sort: str = "time") -> dict:
+def load_history(limit: int = 50, offset: int = 0, sort: str = "time", filter_str: str = "") -> dict:
     limit = max(1, min(int(limit), 50000))
     offset = max(0, int(offset))
     order_sql = (
@@ -488,11 +488,21 @@ def load_history(limit: int = 50, offset: int = 0, sort: str = "time") -> dict:
     )
     with _history_db() as conn:
         conn.execute("UPDATE history SET initial = COALESCE(initial, substr(upper(q),1,1)) WHERE initial IS NULL")
-        total = conn.execute("SELECT COUNT(*) FROM history").fetchone()[0]
-        rows = conn.execute(
-            f"SELECT q, created_at FROM history ORDER BY {order_sql} LIMIT ? OFFSET ?",
-            (limit, offset),
-        ).fetchall()
+        if filter_str:
+            pattern = f"%{filter_str.lower()}%"
+            total = conn.execute(
+                "SELECT COUNT(*) FROM history WHERE lower(q) LIKE ?", (pattern,)
+            ).fetchone()[0]
+            rows = conn.execute(
+                f"SELECT q, created_at FROM history WHERE lower(q) LIKE ? ORDER BY {order_sql} LIMIT ? OFFSET ?",
+                (pattern, limit, offset),
+            ).fetchall()
+        else:
+            total = conn.execute("SELECT COUNT(*) FROM history").fetchone()[0]
+            rows = conn.execute(
+                f"SELECT q, created_at FROM history ORDER BY {order_sql} LIMIT ? OFFSET ?",
+                (limit, offset),
+            ).fetchall()
     items = [{"q": r[0], "created_at": r[1]} for r in rows]
     return {"total": total, "items": items}
 

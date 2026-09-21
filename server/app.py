@@ -182,7 +182,8 @@ def api_history():
     sort = request.args.get("sort", "time")
     if sort not in {"time", "alpha"}:
         sort = "time"
-    return jsonify(ok=True, **engine.load_history(limit, offset, sort))
+    filter_str = request.args.get("filter", "")
+    return jsonify(ok=True, **engine.load_history(limit, offset, sort, filter_str))
 
 
 @app.post("/api/history/delete")

@@ -112,6 +112,7 @@
         <button type="button" id="histStop" style="display:none;border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;color:#b02a37">⏹ 停止</button>
         <button type="button" id="historyClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
       </div>
+      <input type="text" id="histSearch" placeholder="🔍 输入关键词过滤…" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1.5px solid #c4d0e8;border-radius:10px;font-size:14px;margin-bottom:6px;background:#f0f4fa;outline:none" autocomplete="off">
       <div id="historyList" style="overflow:auto;flex:1"></div>
       <div id="playExampleBar" style="display:none;margin:6px 0 4px;background:#f6f8fb;border:1px solid #dde4ec;border-radius:10px;padding:10px 12px;box-sizing:border-box"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px">
@@ -306,9 +307,10 @@ function fmtTime(ts) {
   var d = new Date(ts * 1000);
   return (d.getMonth() + 1) + '-' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
+var histFilter = '';
 function loadHistoryPage() {
   historyList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
-  var u = 'api/history?limit=50&offset=' + histOffset + '&sort=' + histSort + '&token=' + encodeURIComponent(window.API_TOKEN || '');
+  var u = 'api/history?limit=50&filter=' + encodeURIComponent(histFilter) + '&offset=' + histOffset + '&sort=' + histSort + '&token=' + encodeURIComponent(window.API_TOKEN || '');
   fetch(u)
     .then(function (r) { return r.json(); })
     .then(function (d) {
@@ -509,6 +511,16 @@ document.getElementById('histSort').addEventListener('click', function () {
   this.textContent = histSort === 'time' ? '排序：时间' : '排序：字母';
   histOffset = 0;
   loadHistoryPage();
+});
+var histSearchTimer = null;
+document.getElementById('histSearch').addEventListener('input', function () {
+  var v = this.value;
+  if (histSearchTimer) clearTimeout(histSearchTimer);
+  histSearchTimer = setTimeout(function () {
+    histFilter = v.trim().toLowerCase();
+    histOffset = 0;
+    loadHistoryPage();
+  }, 300);
 });
 document.getElementById('histPrev').addEventListener('click', function () { if (histOffset > 0) { histOffset -= HIST_PAGE; loadHistoryPage(); } });
 document.getElementById('histNext').addEventListener('click', function () { if (histOffset + HIST_PAGE < histTotal) { histOffset += HIST_PAGE; loadHistoryPage(); } });
