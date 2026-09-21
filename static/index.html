@@ -483,19 +483,38 @@ function newsNormW(s) {
   return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 function newsAlign(words, marks) {
-  var out = new Array(words.length);
+  var n = words.length;
+  var out = new Array(n);
+  var i;
+  if (!n || !marks.length) return out;
   var mi = 0;
-  for (var i = 0; i < words.length; i++) {
+  for (i = 0; i < n; i++) {
     var rw = newsNormW(words[i]);
-    if (!rw) { out[i] = null; continue; }
-    var guard = 0;
-    while (mi < marks.length && guard < 60) {
-      var mw = newsNormW(marks[mi].w);
-      if (mw && (rw === mw || rw.indexOf(mw) >= 0 || mw.indexOf(rw) >= 0)) break;
-      mi++; guard++;
+    out[i] = null;
+    if (!rw) continue;
+    var hit = -1;
+    var kmax = Math.min(mi + 4, marks.length);
+    for (var k = mi; k < kmax; k++) {
+      var mw = newsNormW(marks[k].w);
+      if (mw && (rw === mw || rw.indexOf(mw) >= 0 || mw.indexOf(rw) >= 0)) { hit = k; break; }
     }
-    if (mi < marks.length) { out[i] = marks[mi].t; mi++; }
-    else out[i] = null;
+    if (hit >= 0) { out[i] = marks[hit].t; mi = hit + 1; }
+  }
+  var lastIdx = -1;
+  for (i = 0; i < n; i++) {
+    if (out[i] !== null && out[i] !== undefined) {
+      if (lastIdx >= 0 && i - lastIdx > 1) {
+        var t0 = out[lastIdx], t1 = out[i];
+        for (var m = lastIdx + 1; m < i; m++) out[m] = t0 + (t1 - t0) * (m - lastIdx) / (i - lastIdx);
+      } else if (lastIdx < 0) {
+        for (var m2 = 0; m2 < i; m2++) out[m2] = out[i];
+      }
+      lastIdx = i;
+    }
+  }
+  if (lastIdx >= 0 && lastIdx < n - 1) {
+    var lastT = out[lastIdx] + 0.35;
+    for (var m3 = lastIdx + 1; m3 < n; m3++) { out[m3] = lastT; lastT += 0.35; }
   }
   return out;
 }
