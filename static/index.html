@@ -298,15 +298,19 @@ var mvItems = [];
 var mvIdx = 0;
 
 function mvSpeakUrl(text) {
-  return 'api/tts?text=' + encodeURIComponent(text) + '&lang=en&token=***' + encodeURIComponent(window.API_TOKEN || '');
+  return 'api/tts?text=' + encodeURIComponent(text) + '&lang=en&token=' + encodeURIComponent(window.API_TOKEN || '');
 }
 function mvLoad() {
   movieList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
-  var u = 'api/movies?limit=200&token=***' + encodeURIComponent(window.API_TOKEN || '');
+  var u = 'api/movies?limit=200&token=' + encodeURIComponent(window.API_TOKEN || '');
   fetch(u, { credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
     .then(function (d) {
-      mvItems = (d && d.items) || [];
+      if (!d || !d.ok) {
+        movieList.innerHTML = '<div style="color:#b02a37;font-size:13px;text-align:center;padding:16px">加载失败' + ((d && d.error) ? '：' + esc(String(d.error)) : '') + '</div>';
+        return;
+      }
+      mvItems = d.items || [];
       if (!mvItems.length) {
         movieList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">暂无影视台词（查词时自动收藏）</div>';
         return;
