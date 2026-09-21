@@ -665,7 +665,7 @@ function histStopSelAudio() {
   if (bq) {
     histBadgeSet(bq, 0);
     var bel = histFace(histEntryEl(bq));
-    if (bel) bel.style.background = '';
+    if (bel) bel.style.background = '#fff';
   }
 }
 function histSoloNext() {
@@ -674,7 +674,7 @@ function histSoloNext() {
   var q = histSolo.q;
   var lang = /[\u4e00-\u9fff]/.test(q) ? 'zh-CN' : 'en';
   var els = historyList.querySelectorAll('[data-q]');
-  for (var k = 0; k < els.length; k++) { var fk = histFace(els[k]); if (fk) fk.style.background = ''; }
+  for (var k = 0; k < els.length; k++) { var fk = histFace(els[k]); if (fk) fk.style.background = '#fff'; }
   var el = histEntryEl(q);
   var ef = histFace(el);
   if (ef) ef.style.background = '#fff3d6';
@@ -755,7 +755,7 @@ function stopHistPlay() {
   document.getElementById('histStop').style.display = 'none';
   hideExampleBar();
   var els = historyList.querySelectorAll('[data-q]');
-  for (var i = 0; i < els.length; i++) { var fi = histFace(els[i]); if (fi) fi.style.background = ''; }
+  for (var i = 0; i < els.length; i++) { var fi = histFace(els[i]); if (fi) fi.style.background = '#fff'; }
 }
 function pauseHistPlay() {
   if (!histPlaying || histPaused) return;
@@ -820,7 +820,7 @@ function histNext() {
     if (playbackLoop) { histIdx = 0; } else { stopHistPlay(); return; }
   }
   var el = histItems[histIdx];
-  for (var k = 0; k < histItems.length; k++) { var fk = histFace(histItems[k]); if (fk) fk.style.background = ''; }
+  for (var k = 0; k < histItems.length; k++) { var fk = histFace(histItems[k]); if (fk) fk.style.background = '#fff'; }
   var ef = histFace(el);
   if (ef) ef.style.background = '#fff3e8';
   el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
