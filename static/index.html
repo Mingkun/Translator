@@ -468,7 +468,7 @@ function histNext() {
   el.style.background = '#fff3e8';
   el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   var word = el.getAttribute('data-q') || '';
-  var lang = /[A-Za-z]/.test(word) ? 'en' : 'zh-CN';
+  var lang = /[\u4e00-\u9fff]/.test(word) ? 'zh-CN' : 'en';
   histCurrent = { word: word, lang: lang };
   histIdx += 1;
   histPlaySound(histPlayUrl(word, lang), function () {
