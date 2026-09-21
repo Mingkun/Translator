@@ -588,6 +588,7 @@ var histFilter = '';
 function loadHistoryPage() {
   histStopSelAudio();
   histSelEl = null;
+  histSwipeOpen = null;
   historyList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
   var u = 'api/history?limit=50&filter=' + encodeURIComponent(histFilter) + '&offset=' + histOffset + '&sort=' + histSort + '&token=' + encodeURIComponent(window.API_TOKEN || '');
   fetch(u)
@@ -599,12 +600,14 @@ function loadHistoryPage() {
         historyList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">' + (histOffset === 0 ? '暂无查询记录' : '没有更多了') + '</div>';
       } else {
         historyList.innerHTML = items.map(function (it) {
-          return '<div data-q="' + esc(it.q) + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 8px;border-bottom:1px dashed #dde4ec;cursor:pointer">' +
+          return '<div data-q="' + esc(it.q) + '" data-swipe="1" style="position:relative;overflow:hidden;border-bottom:1px dashed #dde4ec;user-select:none;-webkit-user-select:none">' +
+            '<button type="button" data-del="' + esc(it.q) + '" style="position:absolute;right:0;top:0;bottom:0;width:56px;border:none;background:#e03131;color:#fff;font-size:13px;cursor:pointer">删除</button>' +
+            '<div class="swipe-c" style="position:relative;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 8px;background:#fff;transition:transform .15s ease;cursor:pointer">' +
             '<span style="font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(it.q) + '</span>' +
             '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;justify-content:flex-end">' +
             '<span data-badge="1" style="font-size:11px;color:#e8590c;font-weight:600;min-width:16px;text-align:right"></span>' +
             '<span style="font-size:11px;color:#5a6472">' + esc(fmtTime(it.created_at)) + '</span>' +
-            '<button type="button" data-del="' + esc(it.q) + '" style="border:none;background:none;color:#c92a2a;font-size:15px;cursor:pointer;padding:0 4px">×</button></div></div>';
+            '</div></div></div>';
         }).join('');
       }
       var page = Math.floor(histOffset / HIST_PAGE) + 1;
@@ -661,7 +664,7 @@ function histStopSelAudio() {
   histSolo = { q: '', count: 0, played: 0, audio: null, timer: null, playing: false };
   if (bq) {
     histBadgeSet(bq, 0);
-    var bel = histEntryEl(bq);
+    var bel = histFace(histEntryEl(bq));
     if (bel) bel.style.background = '';
   }
 }
@@ -671,9 +674,10 @@ function histSoloNext() {
   var q = histSolo.q;
   var lang = /[\u4e00-\u9fff]/.test(q) ? 'zh-CN' : 'en';
   var els = historyList.querySelectorAll('[data-q]');
-  for (var k = 0; k < els.length; k++) els[k].style.background = '';
+  for (var k = 0; k < els.length; k++) { var fk = histFace(els[k]); if (fk) fk.style.background = ''; }
   var el = histEntryEl(q);
-  if (el) el.style.background = '#fff3d6';
+  var ef = histFace(el);
+  if (ef) ef.style.background = '#fff3d6';
   histBadgeSet(q, histSolo.count - histSolo.played);
   var a = new Audio(histPlayUrl(q, lang));
   histSolo.audio = a;
@@ -751,7 +755,7 @@ function stopHistPlay() {
   document.getElementById('histStop').style.display = 'none';
   hideExampleBar();
   var els = historyList.querySelectorAll('[data-q]');
-  for (var i = 0; i < els.length; i++) els[i].style.background = '';
+  for (var i = 0; i < els.length; i++) { var fi = histFace(els[i]); if (fi) fi.style.background = ''; }
 }
 function pauseHistPlay() {
   if (!histPlaying || histPaused) return;
@@ -816,8 +820,9 @@ function histNext() {
     if (playbackLoop) { histIdx = 0; } else { stopHistPlay(); return; }
   }
   var el = histItems[histIdx];
-  for (var k = 0; k < histItems.length; k++) histItems[k].style.background = '';
-  el.style.background = '#fff3e8';
+  for (var k = 0; k < histItems.length; k++) { var fk = histFace(histItems[k]); if (fk) fk.style.background = ''; }
+  var ef = histFace(el);
+  if (ef) ef.style.background = '#fff3e8';
   el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   var word = el.getAttribute('data-q') || '';
   var lang = /[\u4e00-\u9fff]/.test(word) ? 'zh-CN' : 'en';
@@ -897,6 +902,8 @@ historyList.addEventListener('click', function (e) {
 
   var item = e.target.closest('[data-q]');
   if (!item) return;
+  if (histDragged) { histDragged = false; return; }
+  if (histSwipeOpen) { histSwipeClose(); return; }
   histClicks++;
   if (histClicks === 1) {
     histListClickTimer = setTimeout(function () { histListClickTimer = null; histClicks = 0; histSelectPlay(item, 1); }, 300);
@@ -908,6 +915,69 @@ historyList.addEventListener('click', function (e) {
     histClicks = 0;
     histEnterTranslate(item);
   }
+});
+var histDragged = false;
+var histSwipeOpen = null;
+function histFace(el) { return (el && el.querySelector('.swipe-c')) || el; }
+function histSwipeClose() {
+  if (!histSwipeOpen) return;
+  var c = histFace(histSwipeOpen);
+  if (c) c.style.transform = '';
+  histSwipeOpen = null;
+}
+function histSwipeDo(row, dx) {
+  var c = histFace(row);
+  if (c) c.style.transform = 'translateX(' + dx + 'px)';
+}
+var histSwipe = { row: null, sx: 0, sy: 0, dx: 0, active: false };
+historyList.addEventListener('touchstart', function (e) {
+  if (e.touches.length !== 1) return;
+  var t = e.touches[0];
+  var row = t.target && t.target.closest ? t.target.closest('[data-swipe]') : null;
+  histSwipe.row = row; histSwipe.sx = t.clientX; histSwipe.sy = t.clientY; histSwipe.dx = 0; histSwipe.active = false;
+  if (row && histSwipeOpen && histSwipeOpen !== row) histSwipeClose();
+}, { passive: true });
+historyList.addEventListener('touchmove', function (e) {
+  if (!histSwipe.row) return;
+  var t = e.touches[0];
+  var dx = t.clientX - histSwipe.sx;
+  var dy = t.clientY - histSwipe.sy;
+  if (!histSwipe.active && Math.abs(dy) > Math.abs(dx)) { histSwipe.row = null; return; }
+  if (dx < 0) { histSwipe.active = true; histSwipe.dx = Math.max(dx, -64); histSwipeDo(histSwipe.row, histSwipe.dx); }
+}, { passive: true });
+historyList.addEventListener('touchend', function () {
+  if (!histSwipe.row) return;
+  if (histSwipe.active) {
+    histDragged = true;
+    if (histSwipe.dx < -32) { histSwipeDo(histSwipe.row, -56); histSwipeOpen = histSwipe.row; }
+    else { histSwipeDo(histSwipe.row, 0); }
+  }
+  histSwipe.row = null;
+}, { passive: true });
+var histMouse = { row: null, sx: 0, sy: 0, dx: 0, down: false, active: false };
+historyList.addEventListener('mousedown', function (e) {
+  if (e.button !== 0) return;
+  var row = e.target && e.target.closest ? e.target.closest('[data-swipe]') : null;
+  if (!row) return;
+  histMouse.row = row; histMouse.sx = e.clientX; histMouse.sy = e.clientY; histMouse.dx = 0; histMouse.down = true; histMouse.active = false;
+  if (histSwipeOpen && histSwipeOpen !== row) histSwipeClose();
+});
+document.addEventListener('mousemove', function (e) {
+  if (!histMouse.down || !histMouse.row) return;
+  var dx = e.clientX - histMouse.sx;
+  var dy = e.clientY - histMouse.sy;
+  if (!histMouse.active) { if (Math.abs(dx) < 8 || Math.abs(dy) > Math.abs(dx)) return; }
+  if (dx < 0) { histMouse.active = true; histMouse.dx = Math.max(dx, -64); histSwipeDo(histMouse.row, histMouse.dx); }
+  else if (histMouse.active) { histMouse.dx = 0; histSwipeDo(histMouse.row, 0); }
+});
+document.addEventListener('mouseup', function () {
+  if (!histMouse.down || !histMouse.row) { histMouse.down = false; return; }
+  if (histMouse.active) {
+    histDragged = true;
+    if (histMouse.dx < -32) { histSwipeDo(histMouse.row, -56); histSwipeOpen = histMouse.row; }
+    else { histSwipeDo(histMouse.row, 0); }
+  }
+  histMouse.down = false; histMouse.row = null;
 });
 qEl.addEventListener('keydown', function(e){ if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) translate(); });
 </script>
