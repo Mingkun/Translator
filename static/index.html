@@ -226,7 +226,7 @@ function fetchQuote() {
       if (d.ok) {
         var pct = parseFloat(d.change_pct) || 0;
         var color = pct > 0 ? '#c92a2a' : (pct < 0 ? '#2f9e44' : 'var(--text)');
-        bar.innerHTML = '<span style="color:' + color + '">' + esc(d.name) + ' ' + esc(d.price) + ' ' + (pct > 0 ? '+' : '') + esc(d.change_pct) + '%</span>';
+        bar.innerHTML = '<span style="color:' + color + '">' + esc(d.name) + ' ' + esc(d.price) + ' ' + (pct > 0 ? '+' : '') + pct.toFixed(2) + '%</span>';
       } else {
         bar.textContent = '行情获取失败';
       }
