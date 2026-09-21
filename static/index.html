@@ -305,7 +305,7 @@ var histTotal = 0;
 var HIST_PAGE = 50;
 function fmtTime(ts) {
   var d = new Date(ts * 1000);
-  return (d.getMonth() + 1) + '-' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  return String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
 var histFilter = '';
 function loadHistoryPage() {
