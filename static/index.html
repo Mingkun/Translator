@@ -63,6 +63,7 @@
     <div style="display:flex;gap:8px;margin-top:10px">
       <button type="button" class="go" id="go" style="flex:1">翻 译</button>
       <button type="button" class="go" id="ocrBtn" style="width:64px;font-size:20px" title="截图翻译">📷</button>
+      <button type="button" class="go" id="newsBtn" style="width:64px;font-size:13px" title="每日新闻">📰 新闻</button>
       <button type="button" class="go" id="movieBtn" style="width:64px;font-size:13px" title="影视库">🎬 影视</button>
       <button type="button" class="go" id="historyBtn" style="width:64px;font-size:13px" title="历史">🕘 历史</button>
     </div>
@@ -127,6 +128,19 @@
   </div>
 </div>
   
+<div id="newsOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2100;align-items:center;justify-content:center;">
+  <div style="width:min(420px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <strong style="font-size:15px">📰 每日新闻</strong>
+      <button type="button" id="newsClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
+    </div>
+    <div id="newsBody" style="overflow:auto;flex:1"></div>
+    <div style="display:flex;gap:8px;margin-top:10px;justify-content:center">
+      <button type="button" id="newsPlay" style="border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:4px 14px;font-size:12px;cursor:pointer;color:#5a6472">▶ 播放</button>
+      <button type="button" id="newsStop" style="border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:4px 14px;font-size:12px;cursor:pointer;color:#5a6472;display:none">⏹ 停止</button>
+    </div>
+  </div>
+</div>
 <div id="movieOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
   <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
@@ -443,6 +457,56 @@ document.getElementById('mvPlay').addEventListener('click', function () {
 });
 document.getElementById('mvStop').addEventListener('click', mvStopPlay);
 
+var newsOverlay = document.getElementById('newsOverlay');
+var newsBody = document.getElementById('newsBody');
+var newsAudio = null;
+var newsPlaying = false;
+var newsPaused = false;
+var newsDate = '';
+function newsStopPlay() {
+  newsPlaying = false; newsPaused = false;
+  if (newsAudio) { try { newsAudio.pause(); } catch (e) {} newsAudio = null; }
+  document.getElementById('newsPlay').textContent = '▶ 播放';
+  document.getElementById('newsStop').style.display = 'none';
+}
+function newsLoad() {
+  newsStopPlay();
+  newsBody.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
+  var u = 'api/news?token=' + encodeURIComponent(window.API_TOKEN || '');
+  fetch(u, { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d || !d.ok) {
+        newsBody.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">暂无新闻' + ((d && d.error) ? '：' + esc(String(d.error)) : '') + '</div>';
+        return;
+      }
+      newsDate = d.date;
+      newsBody.innerHTML =
+        '<div style="font-size:15px;font-weight:600;line-height:1.5;color:#1f2630">' + esc(d.title) + '</div>' +
+        '<div style="font-size:11px;color:#5a6472;margin:4px 0 10px">' + esc(d.date) + ' · <a href="' + esc(d.url) + '" target="_blank" style="color:#7048a8">CNN 原文</a></div>' +
+        '<div style="font-size:14px;line-height:1.8;color:#1f2630">' + esc(d.text) + '</div>';
+    })
+    .catch(function () { newsBody.innerHTML = '<div style="color:#b02a37;font-size:13px;text-align:center;padding:16px">加载失败</div>'; });
+}
+document.getElementById('newsBtn').addEventListener('click', function () {
+  newsOverlay.style.display = 'flex';
+  newsLoad();
+});
+document.getElementById('newsClose').addEventListener('click', function () { newsStopPlay(); newsOverlay.style.display = 'none'; });
+newsOverlay.addEventListener('click', function (e) { if (e.target === newsOverlay) { newsStopPlay(); newsOverlay.style.display = 'none'; } });
+document.getElementById('newsPlay').addEventListener('click', function () {
+  if (newsPlaying && !newsPaused) { newsPaused = true; if (newsAudio) { try { newsAudio.pause(); } catch (e) {} } this.textContent = '▶ 继续'; return; }
+  if (newsPlaying && newsPaused) { newsPaused = false; this.textContent = '⏸ 暂停'; if (newsAudio) { newsAudio.play().catch(function () {}); } return; }
+  if (!newsDate) return;
+  newsPlaying = true; newsPaused = false;
+  this.textContent = '⏸ 暂停';
+  document.getElementById('newsStop').style.display = '';
+  newsAudio = new Audio('api/news/audio?date=' + encodeURIComponent(newsDate) + '&token=' + encodeURIComponent(window.API_TOKEN || ''));
+  newsAudio.onended = newsStopPlay;
+  newsAudio.onerror = newsStopPlay;
+  newsAudio.play().catch(function () { newsStopPlay(); });
+});
+document.getElementById('newsStop').addEventListener('click', newsStopPlay);
 var lastAutoPlayUrl = null;
 var sysOverlay = document.getElementById('sysOverlay');
 var playbackMode = localStorage.getItem('tr_playbackMode') || 'both';

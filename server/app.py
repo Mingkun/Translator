@@ -270,6 +270,46 @@ def api_movies():
     return jsonify(ok=True, items=items, total=total)
 
 
+@app.get("/api/news")
+def api_news():
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    import sqlite3
+    conn = sqlite3.connect(engine.DB_PATH, timeout=15)
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            "SELECT date, title, url, text FROM news_daily ORDER BY date DESC LIMIT 1"
+        ).fetchone()
+        if not row:
+            return jsonify(ok=False, error="no news yet")
+        audio = APP_ROOT / "data" / "news" / (row["date"] + ".mp3")
+        return jsonify(
+            ok=True,
+            date=row["date"],
+            title=row["title"],
+            url=row["url"],
+            text=row["text"],
+            has_audio=audio.is_file(),
+        )
+    finally:
+        conn.close()
+
+
+@app.get("/api/news/audio")
+def api_news_audio():
+    if not _authorized():
+        abort(401)
+    import re as _re2
+    date = (request.args.get("date") or "").strip()
+    if not _re2.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        abort(400)
+    path = APP_ROOT / "data" / "news" / (date + ".mp3")
+    if not path.is_file():
+        abort(404)
+    return Response(path.read_bytes(), mimetype="audio/mpeg")
+
+
 @app.get("/downloads/<path:name>")
 def downloads(name: str):
     import urllib.parse as _up

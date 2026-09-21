@@ -1,0 +1,10 @@
+[Unit]
+Description=Translator daily CNN news fetcher
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/work/Translator
+ExecStart=/usr/bin/python3 /work/Translator/scripts/fetch_daily_news.py
+TimeoutStartSec=300
