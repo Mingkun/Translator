@@ -42,6 +42,9 @@
 <div class="wrap">
   <header>
     <div class="logo">🦜</div>
+    <div style="flex:1;text-align:center;min-width:0">
+      <div id="quoteBar" style="font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+    </div>
     <div>
       <h1>翻译鹦鹉</h1>
       <div class="sub">中英互译 · 音标 · 发音 · 例句</div>
@@ -81,7 +84,20 @@
         <div><div>Windows 客户端</div><div style="font-size:11px;color:var(--muted)">ZIP 免安装绿色版</div></div>
       </a>
     
-    <div style="font-size:13px;color:var(--muted);margin:14px 0 8px">播放设置</div>
+    <div style="font-size:13px;color:var(--muted);margin:14px 0 8px">行情设置</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px dashed var(--line);">
+      <span style="font-size:14px;">显示行情</span>
+      <button type="button" id="quoteOn" style="border:1px solid var(--line);background:#e8590c;color:#fff;border-radius:20px;padding:4px 18px;font-size:13px;cursor:pointer">开</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px dashed var(--line);">
+      <span style="font-size:14px;">股票代码</span>
+      <input type="text" id="quoteCode" placeholder="HK02513 / 600519" style="width:120px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;text-align:center" value="HK02513">
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
+      <span style="font-size:14px;">刷新周期(秒)</span>
+      <input type="number" id="quoteInterval" min="3" max="60" style="width:64px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;text-align:center" value="3">
+    </div>
+<div style="font-size:13px;color:var(--muted);margin:14px 0 8px">播放设置</div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px dashed var(--line);">
       <span style="font-size:14px;">播放内容</span>
       <div style="display:flex;gap:8px;">
@@ -185,6 +201,78 @@ function preloadHistoryCache() {
     })
     .catch(function () {});
 }
+
+var quoteEnabled = localStorage.getItem('tr_quoteOn') !== 'false';
+var quoteCode = localStorage.getItem('tr_quoteCode') || 'HK02513';
+var quoteInterval = parseInt(localStorage.getItem('tr_quoteInterval') || '3', 10) || 3;
+var quoteTimer = null;
+
+function updateQuoteUI() {
+  var b = document.getElementById('quoteOn');
+  if (!b) return;
+  b.textContent = quoteEnabled ? '开' : '关';
+  b.style.background = quoteEnabled ? '#e8590c' : '#fff';
+  b.style.color = quoteEnabled ? '#fff' : 'var(--text)';
+}
+
+function fetchQuote() {
+  if (!quoteEnabled || !quoteCode) return;
+  var q = chr39('api/quote?code=') + encodeURIComponent(quoteCode) + chr39('&token=') + encodeURIComponent(window.API_TOKEN || '');
+  fetch(q, { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var bar = document.getElementById('quoteBar');
+      if (!bar) return;
+      if (d.ok) {
+        var pct = parseFloat(d.change_pct) || 0;
+        var color = pct > 0 ? '#c92a2a' : (pct < 0 ? '#2f9e44' : 'var(--text)');
+        bar.innerHTML = '<span style="color:' + color + '">' + esc(d.name) + ' ' + esc(d.price) + ' ' + (pct > 0 ? '+' : '') + esc(d.change_pct) + '%</span>';
+      } else {
+        bar.textContent = '行情获取失败';
+      }
+    })
+    .catch(function () {});
+}
+
+function startQuoteLoop() {
+  if (quoteTimer) clearInterval(quoteTimer);
+  if (quoteEnabled) {
+    fetchQuote();
+    quoteTimer = setInterval(fetchQuote, quoteInterval * 1000);
+  } else {
+    var bar = document.getElementById('quoteBar');
+    if (bar) bar.textContent = '';
+  }
+}
+
+function chr39(s) { return s; }
+
+if (document.getElementById('quoteOn')) document.getElementById('quoteOn').addEventListener('click', function () {
+  quoteEnabled = !quoteEnabled;
+  localStorage.setItem('tr_quoteOn', String(quoteEnabled));
+  updateQuoteUI();
+  startQuoteLoop();
+});
+if (document.getElementById('quoteCode')) {
+  document.getElementById('quoteCode').value = quoteCode;
+  document.getElementById('quoteCode').addEventListener('change', function () {
+    quoteCode = this.value.trim() || 'HK02513';
+    this.value = quoteCode;
+    localStorage.setItem('tr_quoteCode', quoteCode);
+    startQuoteLoop();
+  });
+}
+if (document.getElementById('quoteInterval')) {
+  document.getElementById('quoteInterval').value = quoteInterval;
+  document.getElementById('quoteInterval').addEventListener('change', function () {
+    quoteInterval = Math.max(3, Math.min(60, parseInt(this.value || '3', 10) || 3));
+    this.value = quoteInterval;
+    localStorage.setItem('tr_quoteInterval', String(quoteInterval));
+    startQuoteLoop();
+  });
+}
+updateQuoteUI();
+startQuoteLoop();
 
 var lastAutoPlayUrl = null;
 var sysOverlay = document.getElementById('sysOverlay');

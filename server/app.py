@@ -204,6 +204,20 @@ def api_history_delete():
     return jsonify(ok=True, deleted=n)
 
 
+@app.get("/api/quote")
+def api_quote():
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    code = request.args.get("code", "").strip()
+    if not code:
+        return jsonify(ok=False, error="missing code"), 400
+    try:
+        data = engine.fetch_realtime_quote(code)
+        return jsonify(ok=True, **data)
+    except Exception as exc:
+        return jsonify(ok=False, error=str(exc)[:120]), 502
+
+
 @app.get("/downloads/<path:name>")
 def downloads(name: str):
     import urllib.parse as _up

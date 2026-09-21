@@ -595,3 +595,35 @@ def _extract_json_object(text: str) -> dict | None:
                 return parsed if isinstance(parsed, dict) else None
     return None
 
+def fetch_realtime_quote(code: str) -> dict:
+    """获取港股/A股实时行情（新浪免费接口）。"""
+    code = code.strip()
+    if code.upper().startswith("HK") or code.isdigit() and len(code) == 5:
+        full = "hk" + code.lstrip("HKhk").zfill(5)
+    elif code.isdigit() and len(code) == 6:
+        prefix = "sh" if code.startswith(("6", "9")) else "sz"
+        full = prefix + code
+    else:
+        raise ValueError(f"unsupported code: {code}")
+    url = f"https://hq.sinajs.cn/list={full}"
+    req = urllib.request.Request(url, headers={"Referer": "https://finance.sina.com.cn", "User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        text = resp.read().decode("gbk", errors="replace")
+    parts = text.split('"')[1].split(",") if '"' in text else []
+    if len(parts) < 10:
+        raise ValueError("no data")
+    if full.startswith("hk"):
+        return {
+            "code": full,
+            "name": parts[1],
+            "price": parts[3],
+            "change": parts[4],
+            "change_pct": parts[5],
+        }
+    return {
+        "code": full,
+        "name": parts[0],
+        "price": parts[3],
+        "change": str(round(float(parts[3]) - float(parts[2]), 2)),
+        "change_pct": str(round((float(parts[3]) - float(parts[2])) / float(parts[2]) * 100, 2)) if parts[2] != "0.000" else "0",
+    }
