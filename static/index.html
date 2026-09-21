@@ -166,6 +166,25 @@ function cacheLoad(q) {
   try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; }
 }
 
+function preloadHistoryCache() {
+  var u = 'api/history?limit=50&sort=time&token=' + encodeURIComponent(window.API_TOKEN || '');
+  fetch(u, { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var items = (d && d.items) || [];
+      items.forEach(function (it) {
+        var q = it.q;
+        if (cacheLoad(q)) return;
+        var tu = 'api/translate?q=' + encodeURIComponent(q) + '&from=auto&to=&token=' + encodeURIComponent(window.API_TOKEN || '');
+        fetch(tu, { credentials: 'same-origin' })
+          .then(function (r2) { return r2.json(); })
+          .then(function (d2) { if (d2.ok) cacheSave(q, d2); })
+          .catch(function () {});
+      });
+    })
+    .catch(function () {});
+}
+
 var lastAutoPlayUrl = null;
 var sysOverlay = document.getElementById('sysOverlay');
 var playbackMode = localStorage.getItem('tr_playbackMode') || 'both';
@@ -254,6 +273,7 @@ function translate(){
     });
 }
 document.getElementById('go').addEventListener('click', translate);
+preloadHistoryCache();
 var imgInput = document.getElementById('imgInput');
 document.getElementById('ocrBtn').addEventListener('click', function(){ imgInput.click(); });
 imgInput.addEventListener('change', function(){
