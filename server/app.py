@@ -284,6 +284,14 @@ def api_news():
         if not row:
             return jsonify(ok=False, error="no news yet")
         audio = APP_ROOT / "data" / "news" / (row["date"] + ".mp3")
+        words = []
+        meta = APP_ROOT / "data" / "news" / (row["date"] + ".json")
+        if meta.is_file():
+            try:
+                import json as _json
+                words = _json.loads(meta.read_text(encoding="utf-8"))
+            except Exception:
+                words = []
         return jsonify(
             ok=True,
             date=row["date"],
@@ -291,6 +299,7 @@ def api_news():
             url=row["url"],
             text=row["text"],
             has_audio=audio.is_file(),
+            words=words,
         )
     finally:
         conn.close()

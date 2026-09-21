@@ -68,12 +68,23 @@ def extract(url):
     return title, ' '.join(out)
 
 
-def tts(text, path):
+def tts(text, audio_path, meta_path):
     import edge_tts
+    import json
 
     async def run():
-        c = edge_tts.Communicate(text, 'en-US-GuyNeural')
-        await c.save(str(path))
+        com = edge_tts.Communicate(text, 'en-US-GuyNeural', boundary='WordBoundary')
+        audio = bytearray()
+        marks = []
+        async for chunk in com.stream():
+            if chunk['type'] == 'audio':
+                audio.extend(chunk['data'])
+            elif chunk['type'] == 'WordBoundary':
+                marks.append({'t': round(chunk['offset'] / 1e7, 3),
+                              'd': round(chunk['duration'] / 1e7, 3),
+                              'w': chunk['text']})
+        Path(audio_path).write_bytes(bytes(audio))
+        Path(meta_path).write_text(json.dumps(marks), encoding='utf-8')
 
     asyncio.run(run())
 
@@ -85,7 +96,8 @@ def main():
     conn.execute('CREATE TABLE IF NOT EXISTS news_daily (date TEXT PRIMARY KEY, title TEXT, url TEXT, text TEXT, created_at REAL)')
     row = conn.execute('SELECT title, text FROM news_daily WHERE date=?', (today,)).fetchone()
     audio = AUDIO_DIR / (today + '.mp3')
-    if row and audio.is_file() and audio.stat().st_size > 1000:
+    meta = AUDIO_DIR / (today + '.json')
+    if row and audio.is_file() and audio.stat().st_size > 1000 and meta.is_file():
         print('EXISTS', today, '|', row[0][:60])
         conn.close()
         return
@@ -93,8 +105,8 @@ def main():
     title, text = extract(url)
     if len(text) < 200:
         raise RuntimeError('article text too short: %d' % len(text))
-    tts(text, audio)
-    if not audio.is_file() or audio.stat().st_size < 1000:
+    tts(text, audio, meta)
+    if not audio.is_file() or audio.stat().st_size < 1000 or not meta.is_file():
         raise RuntimeError('tts output empty')
     conn.execute('INSERT OR REPLACE INTO news_daily (date, title, url, text, created_at) VALUES (?,?,?,?,?)',
                  (today, title, url, text, time.time()))
