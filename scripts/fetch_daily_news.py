@@ -127,7 +127,7 @@ def fetch_podcasts(conn):
     for name, feed in PODCASTS:
         try:
             rss = fetch(feed)
-            items = re.findall(r'<item>(.*?)</item>', rss, re.S)[:3]
+            items = re.findall(r'<item>(.*?)</item>', rss, re.S)[:10]
             added = 0
             for it in items:
                 t = re.search(r'<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>', it, re.S)
