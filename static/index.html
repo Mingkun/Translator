@@ -854,6 +854,7 @@ function histPlayUrl(text, lang) {
   return 'api/tts?text=' + encodeURIComponent(text) + '&lang=' + lang + '&voice=' + ttsVoiceFor(lang) + '&token=' + encodeURIComponent(window.API_TOKEN || '');
 }
 function histSchedule(fn, ms) {
+  if (histPlayTimer) { clearTimeout(histPlayTimer); }
   histPlayTimer = setTimeout(function () { histPlayTimer = null; fn(); }, ms);
 }
 function histCancelTimer() {
@@ -930,11 +931,21 @@ function histEnterTranslate(item) {
   qEl.value = item.getAttribute('data-q') || '';
   translate();
 }
+var histChain = 0;
 function histPlaySound(url, onDone) {
-  histPlayAudio = new Audio(url);
-  histPlayAudio.onended = onDone;
-  histPlayAudio.onerror = function () { if (histPlaying && !histPaused) histSchedule(onDone, 400); };
-  histPlayAudio.play().catch(function () { if (histPlaying && !histPaused) histSchedule(onDone, 400); });
+  histChain += 1;
+  var my = histChain;
+  var fired = false;
+  function adv() {
+    if (fired || my !== histChain) return;
+    fired = true;
+    onDone();
+  }
+  var a = new Audio(url);
+  histPlayAudio = a;
+  a.onended = adv;
+  a.onerror = function () { if (histPlaying && !histPaused && my === histChain) histSchedule(adv, 400); };
+  a.play().catch(function () { if (histPlaying && !histPaused && my === histChain) histSchedule(adv, 400); });
 }
 function showExampleBar(word, pick) {
   var bar = document.getElementById('playExampleBar');
@@ -960,6 +971,7 @@ function hideExampleBar() {
 }
 function stopHistPlay() {
   histStopSelAudio();
+  histChain += 1;
   histPlaying = false;
   histPaused = false;
   histCancelTimer();
@@ -1006,7 +1018,7 @@ function playRandomExample(word, done) {
     var pool = (d && d.ok && d.examples && d.examples.length) ? d.examples : [];
     if (!pool.length) { histSchedule(done, 2000); return; }
     var pick = pool[Math.floor(Math.random() * pool.length)];
-    var exUrl = pick.audio || histPlayUrl(pick.en, 'en');
+    var exUrl = histPlayUrl(pick.en, 'en');
     showExampleBar(word, pick);
     function chainReplay() {
       histSchedule(function () {
