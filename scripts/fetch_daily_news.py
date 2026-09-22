@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DB = ROOT / 'data' / 'cache.db'
 NEWS = ROOT / 'data' / 'news'
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-PER_DAY = 6
+PER_DAY = 5
 SKIP_PREFIX = ('read more', 'related article', 'this story', 'sign up', 'listen to',
                'click here', 'follow cnn', 'see more', 'the-cnn', 'contributed')
 CATEGORY_MAP = {
@@ -127,7 +127,7 @@ def fetch_podcasts(conn):
     for name, feed in PODCASTS:
         try:
             rss = fetch(feed)
-            items = re.findall(r'<item>(.*?)</item>', rss, re.S)[:10]
+            items = re.findall(r'<item>(.*?)</item>', rss, re.S)[:5]
             added = 0
             for it in items:
                 t = re.search(r'<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>', it, re.S)
