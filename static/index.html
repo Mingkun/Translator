@@ -61,10 +61,6 @@
       <textarea id="q" placeholder="输入中文或英文…" autocomplete="off" style="flex:1;width:auto"></textarea>
       <button type="button" class="go" id="go" style="width:56px;margin-top:0;font-size:13px;padding:8px 0">翻译</button>
     </div>
-    <div class="lang-row">
-      <span class="lang" id="dirLabel">自动检测 → 自动</span>
-      <button type="button" class="swap" id="swap">⇄ 切换</button>
-    </div>
     <div style="display:flex;gap:8px;margin-top:10px">
       <button type="button" class="gosec" id="ocrBtn" style="font-size:16px" title="截图翻译">📷</button>
       <button type="button" class="gosec" id="newsBtn" title="每日新闻">📰 新闻</button>
@@ -90,6 +86,11 @@
         <div><div>Windows 客户端</div><div style="font-size:11px;color:var(--muted)">ZIP 免安装绿色版</div></div>
       </a>
     
+    <div style="font-size:13px;color:var(--muted);margin:14px 0 8px">翻译设置</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px dashed var(--line);">
+      <span style="font-size:14px;">翻译方向　<span id="dirLabel" style="font-size:12px;color:var(--muted)">自动检测 → 自动</span></span>
+      <button type="button" class="swap" id="swap">⇄ 切换</button>
+    </div>
     <div style="font-size:13px;color:var(--muted);margin:14px 0 8px">行情设置</div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px dashed var(--line);">
       <span style="font-size:14px;">显示行情</span>
