@@ -668,7 +668,7 @@ var playbackLoop = localStorage.getItem('tr_playbackLoop') === 'true';
 var voiceGender = localStorage.getItem('tr_voiceGender') || 'male';
 function ttsVoiceFor(lang) {
   if (voiceGender === 'female') return lang === 'en' ? 'en-US-AriaNeural' : 'zh-CN-XiaoxiaoNeural';
-  return lang === 'en' ? 'en-US-GuyNeural' : 'zh-CN-YunxiNeural';
+  return lang === 'en' ? 'en-US-AndrewNeural' : 'zh-CN-YunxiNeural';
 }
 function updateVoiceGenderUI() {
   var m = document.getElementById('voiceMale');
