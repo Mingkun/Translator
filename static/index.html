@@ -19,7 +19,7 @@
   textarea { width:100%; min-height:56px; max-height:120px; border:none; outline:none; resize:vertical; font-size:13px; background:#f0f4fa; border-radius:10px; padding:10px 12px; color:var(--text); box-sizing:border-box; }
   .lang-row { display:flex; gap:8px; align-items:center; justify-content:space-between; padding-top:8px; border-top:1px dashed var(--line); }
   .lang { font-size:13px; color:var(--muted); }
-  .swap { border:1px solid var(--line); background:#fff; border-radius:8px; padding:5px 12px; font-size:13px; cursor:pointer; color:var(--text); }
+  .swap { border:1px solid var(--line); background:#f0f4fa; border-radius:10px; padding:4px 12px; font-size:12px; cursor:pointer; color:#5a6472; }
   .go { width:100%; margin-top:10px; border:none; border-radius:10px; background:var(--brand); color:#fff; font-size:16px; font-weight:600; padding:12px 0; cursor:pointer; box-shadow:0 2px 8px rgba(232,89,12,.3); }
   .go:active { opacity:.85; }
   .gosec { width:64px; margin-top:10px; border:1px solid var(--line); border-radius:10px; background:#f0f4fa; color:#5a6472; font-size:13px; font-weight:500; padding:4px 0; cursor:pointer; }
@@ -63,7 +63,7 @@
     </div>
     <div class="lang-row">
       <span class="lang" id="dirLabel">自动检测 → 自动</span>
-      <button type="button" class="swap" id="swap">⇄ 切换方向</button>
+      <button type="button" class="swap" id="swap">⇄ 切换</button>
     </div>
     <div style="display:flex;gap:8px;margin-top:10px">
       <button type="button" class="gosec" id="ocrBtn" style="font-size:16px" title="截图翻译">📷</button>
