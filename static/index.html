@@ -498,9 +498,9 @@ function newsClearHi() {
 }
 function newsHi(k) {
   if (k === newsCurIdx) return;
-  if (newsCurIdx >= 0 && newsCurIdx < newsWords.length) newsWords[newsCurIdx].style.background = '';
   if (k < 0 || k >= newsWords.length) { newsCurIdx = -1; return; }
-  newsWords[k].style.background = '#fff3d6';
+  var from = (newsCurIdx >= 0 && k > newsCurIdx) ? newsCurIdx + 1 : 0;
+  for (var i = from; i <= k; i++) newsWords[i].style.background = '#fff3d6';
   try { newsWords[k].scrollIntoView({ block: 'nearest' }); } catch (e) {}
   newsCurIdx = k;
 }
