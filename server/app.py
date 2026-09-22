@@ -328,13 +328,23 @@ def api_news():
     conn = sqlite3.connect(engine.DB_PATH, timeout=15)
     conn.row_factory = sqlite3.Row
     try:
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS news_items ("
+                         "id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, title TEXT, "
+                         "category TEXT, url TEXT UNIQUE, text TEXT, created_at REAL, audio_url TEXT DEFAULT ''")
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(news_items)")]
+            if "audio_url" not in cols:
+                conn.execute("ALTER TABLE news_items ADD COLUMN audio_url TEXT DEFAULT ''")
+        except Exception:
+            pass
         row = conn.execute(
-            "SELECT id, date, title, category, url, text FROM news_items WHERE id=?", (nid,)
+            "SELECT id, date, title, category, url, text, audio_url FROM news_items WHERE id=?", (nid,)
         ).fetchone()
         if not row:
             return jsonify(ok=False, error="not found")
         h = _news_hash(row["url"])
         audio = APP_ROOT / "data" / "news" / (h + ".mp3")
+        audio_url = (row["audio_url"] or "").strip()
         words = []
         meta = APP_ROOT / "data" / "news" / (h + ".json")
         if meta.is_file():
@@ -352,7 +362,8 @@ def api_news():
             url=row["url"],
             text=row["text"],
             hash=h,
-            has_audio=audio.is_file(),
+            has_audio=audio.is_file() or bool(audio_url),
+            audio_url=audio_url,
             words=words,
         )
     finally:

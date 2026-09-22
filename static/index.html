@@ -484,6 +484,7 @@ var newsAudio = null;
 var newsPlaying = false;
 var newsPaused = false;
 var newsHash = '';
+var newsAudioSrc = '';
 var newsFilter = '';
 var newsSearchTimer = null;
 var newsWords = [];
@@ -606,10 +607,11 @@ function newsLoadDetail(id) {
         return;
       }
       newsHash = d.hash || '';
+      newsAudioSrc = d.audio_url || '';
       var wds = (d.text || '').replace(/\s+/g, ' ').trim().split(' ');
       newsDetailBody.innerHTML =
         '<div style="font-size:15px;font-weight:600;line-height:1.5;color:#1f2630">' + esc(d.title || '') + '</div>' +
-        '<div style="font-size:11px;color:#5a6472;margin:4px 0 10px"><span style="color:#7048a8">[' + esc(d.category || '') + ']</span> ' + esc(d.date || '') + ' · <a href="' + esc(d.url || '') + '" target="_blank" style="color:#7048a8">CNN 原文</a></div>' +
+        '<div style="font-size:11px;color:#5a6472;margin:4px 0 10px"><span style="color:#7048a8">[' + esc(d.category || '') + ']</span> ' + esc(d.date || '') + (newsAudioSrc ? ' · 🎙 原生播客音频' : '') + ' · <a href="' + esc(d.url || '') + '" target="_blank" style="color:#7048a8">' + (newsAudioSrc ? '原声音频' : 'CNN 原文') + '</a></div>' +
         '<div id="newsText" style="font-size:14px;line-height:1.8;color:#1f2630">' + wds.map(function (w) {
           return '<span data-nw="1" style="border-radius:3px">' + esc(w) + '</span> ';
         }).join('') + '</div>';
@@ -637,7 +639,7 @@ function newsStartAudio() {
   newsPlaying = true; newsPaused = false;
   document.getElementById('newsPlay').textContent = '⏸ 暂停';
   document.getElementById('newsStop').style.display = '';
-  newsAudio = new Audio(newsApi('api/news/audio?h=' + encodeURIComponent(newsHash)));
+  newsAudio = new Audio(newsAudioSrc || newsApi('api/news/audio?h=' + encodeURIComponent(newsHash)));
   newsAudio.onended = function () {
     if (!newsPlaying || newsPaused) { newsStopPlay(); return; }
     newsClearHi();

@@ -19,6 +19,9 @@ CATEGORY_MAP = {
     'us': '国际',
 }
 CAT_ORDER = ['科技', '经济', '国际', '政治', '健康', '生活', '体育', '日常']
+PODCASTS = [
+    ('CNN 5 Things', 'https://feeds.megaphone.fm/WMHY2007701094'),
+]
 
 
 def urlhash(u):
@@ -108,7 +111,51 @@ def tts(text, audio_path, meta_path):
 def ensure_schema(conn):
     conn.execute('CREATE TABLE IF NOT EXISTS news_items ('
                  'id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, title TEXT, '
-                 'category TEXT, url TEXT UNIQUE, text TEXT, created_at REAL)')
+                 'category TEXT, url TEXT UNIQUE, text TEXT, created_at REAL, audio_url TEXT DEFAULT \'\')')
+
+
+def ensure_audio_url_col(conn):
+    cols = [r[1] for r in conn.execute('PRAGMA table_info(news_items)')]
+    if 'audio_url' not in cols:
+        conn.execute("ALTER TABLE news_items ADD COLUMN audio_url TEXT DEFAULT ''")
+        conn.commit()
+
+
+def fetch_podcasts(conn):
+    import email.utils
+    ensure_audio_url_col(conn)
+    for name, feed in PODCASTS:
+        try:
+            rss = fetch(feed)
+            items = re.findall(r'<item>(.*?)</item>', rss, re.S)[:3]
+            added = 0
+            for it in items:
+                t = re.search(r'<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>', it, re.S)
+                enc = re.search(r'<enclosure[^>]+url="([^"]+)"', it)
+                pub = re.search(r'<pubDate>([^<]+)</pubDate>', it)
+                desc = re.search(r'<description>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</description>', it, re.S)
+                if not (t and enc):
+                    continue
+                title = strip_tags(t.group(1))[:120]
+                mp3 = enc.group(1).replace('&amp;', '&')
+                date = datetime.now().strftime('%Y-%m-%d')
+                if pub:
+                    try:
+                        date = email.utils.parsedate_to_datetime(pub.group(1).strip()).strftime('%Y-%m-%d')
+                    except Exception:
+                        pass
+                body = strip_tags(desc.group(1)) if desc else ''
+                text = (title + '. ' + body)[:900]
+                cur = conn.execute('INSERT OR IGNORE INTO news_items (date,title,category,url,text,created_at,audio_url) VALUES (?,?,?,?,?,?,?)',
+                                   (date, title, '播客', mp3, text, time.time(), mp3))
+                if cur.rowcount > 0:
+                    added += 1
+                    print('PODCAST [%s] %s' % (date, title[:60]))
+            conn.commit()
+            if not added:
+                print('PODCAST %s: no new episodes' % name)
+        except Exception as e:
+            print('PODCAST FAIL', name, str(e)[:70])
 
 
 def migrate_legacy(conn):
@@ -136,6 +183,8 @@ def main():
     ensure_schema(conn)
     conn.commit()
     migrate_legacy(conn)
+    ensure_audio_url_col(conn)
+    fetch_podcasts(conn)
     have = set(r[0] for r in conn.execute('SELECT url FROM news_items'))
     cands = [u for u in homepage_candidates() if u not in have]
     by_cat = {}
