@@ -605,6 +605,7 @@ function newsLoadDetail(id) {
       newsWords = Array.prototype.slice.call(newsDetailBody.querySelectorAll('[data-nw]'));
       newsWT = newsAlign(newsWords.map(function (el) { return el.textContent; }), (d && d.words) || []);
       newsClearHi();
+      newsStartAudio();
     })
     .catch(function () { newsDetailBody.innerHTML = '<div style="color:#b02a37;font-size:13px;text-align:center;padding:16px">加载失败</div>'; });
 }
@@ -620,15 +621,18 @@ document.getElementById('newsSearch').addEventListener('input', function () {
   if (newsSearchTimer) clearTimeout(newsSearchTimer);
   newsSearchTimer = setTimeout(function () { newsFilter = v.trim().toLowerCase(); newsLoadList(); }, 300);
 });
-document.getElementById('newsPlay').addEventListener('click', function () {
-  if (newsPlaying && !newsPaused) { newsPaused = true; if (newsAudio) { try { newsAudio.pause(); } catch (e) {} } this.textContent = '▶ 继续'; return; }
-  if (newsPlaying && newsPaused) { newsPaused = false; this.textContent = '⏸ 暂停'; if (newsAudio) { newsAudio.play().catch(function () {}); } return; }
+function newsStartAudio() {
   if (!newsHash) return;
   newsPlaying = true; newsPaused = false;
-  this.textContent = '⏸ 暂停';
+  document.getElementById('newsPlay').textContent = '⏸ 暂停';
   document.getElementById('newsStop').style.display = '';
   newsAudio = new Audio(newsApi('api/news/audio?h=' + encodeURIComponent(newsHash)));
-  newsAudio.onended = newsStopPlay;
+  newsAudio.onended = function () {
+    if (!newsPlaying || newsPaused) { newsStopPlay(); return; }
+    newsClearHi();
+    try { newsAudio.currentTime = 0; } catch (e) {}
+    newsAudio.play().catch(function () { newsStopPlay(); });
+  };
   newsAudio.onerror = newsStopPlay;
   newsAudio.addEventListener('timeupdate', function () {
     if (!newsPlaying || newsPaused || !newsAudio) return;
@@ -638,6 +642,11 @@ document.getElementById('newsPlay').addEventListener('click', function () {
     newsHi(k);
   });
   newsAudio.play().catch(function () { newsStopPlay(); });
+}
+document.getElementById('newsPlay').addEventListener('click', function () {
+  if (newsPlaying && !newsPaused) { newsPaused = true; if (newsAudio) { try { newsAudio.pause(); } catch (e) {} } this.textContent = '▶ 继续'; return; }
+  if (newsPlaying && newsPaused) { newsPaused = false; this.textContent = '⏸ 暂停'; if (newsAudio) { newsAudio.play().catch(function () {}); } return; }
+  newsStartAudio();
 });
 document.getElementById('newsStop').addEventListener('click', newsStopPlay);
 var lastAutoPlayUrl = null;
