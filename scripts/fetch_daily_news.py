@@ -89,7 +89,7 @@ def tts(text, audio_path, meta_path):
     import edge_tts
 
     async def run():
-        com = edge_tts.Communicate(text, 'en-US-GuyNeural', boundary='WordBoundary')
+        com = edge_tts.Communicate(text, 'en-US-AndrewNeural', boundary='WordBoundary')
         audio = bytearray()
         marks = []
         async for chunk in com.stream():
