@@ -121,9 +121,33 @@ def ensure_audio_url_col(conn):
         conn.commit()
 
 
+def transcribe_one(mp3_url, words_path, model):
+    """Download podcast audio, generate word timestamps via faster-whisper. Returns transcript text."""
+    import os
+    tmp = '/tmp/podcast_' + urlhash(mp3_url) + '.mp3'
+    req = urllib.request.Request(mp3_url, headers={'User-Agent': UA})
+    with urllib.request.urlopen(req, timeout=180) as r, open(tmp, 'wb') as f:
+        f.write(r.read())
+    segments, info = model.transcribe(tmp, word_timestamps=True, vad_filter=True)
+    words, parts = [], []
+    for seg in segments:
+        for w in (seg.words or []):
+            ww = (w.word or '').strip()
+            if ww:
+                words.append({'t': round(float(w.start), 2), 'd': round(float(w.end - w.start), 2), 'w': ww})
+        parts.append(seg.text.strip())
+    Path(words_path).write_text(json.dumps(words), encoding='utf-8')
+    try:
+        os.remove(tmp)
+    except Exception:
+        pass
+    return ' '.join(parts)
+
+
 def fetch_podcasts(conn):
     import email.utils
     ensure_audio_url_col(conn)
+    model = None
     for name, feed in PODCASTS:
         try:
             rss = fetch(feed)
@@ -151,6 +175,21 @@ def fetch_podcasts(conn):
                 if cur.rowcount > 0:
                     added += 1
                     print('PODCAST [%s] %s' % (date, title[:60]))
+                h = urlhash(mp3)
+                jp = NEWS / (h + '.json')
+                if cur.rowcount > 0 or not jp.is_file():
+                    try:
+                        if model is None:
+                            from faster_whisper import WhisperModel
+                            print('loading whisper base model...', flush=True)
+                            model = WhisperModel('base', device='cpu', compute_type='int8', cpu_threads=2)
+                        transcript = transcribe_one(mp3, jp, model)
+                        if transcript:
+                            conn.execute('UPDATE news_items SET text=? WHERE url=?', (transcript[:5000], mp3))
+                            conn.commit()
+                            print('TRANSCRIPT %s (%d chars)' % (title[:40], len(transcript)))
+                    except Exception as e:
+                        print('TRANSCRIPT FAIL', title[:40], str(e)[:70])
             conn.commit()
             if not added:
                 print('PODCAST %s: no new episodes' % name)
