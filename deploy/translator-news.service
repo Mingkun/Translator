@@ -7,4 +7,4 @@ Wants=network-online.target
 Type=oneshot
 WorkingDirectory=/work/Translator
 ExecStart=/usr/bin/python3 /work/Translator/scripts/fetch_daily_news.py
-TimeoutStartSec=300
+TimeoutStartSec=900

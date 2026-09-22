@@ -270,22 +270,73 @@ def api_movies():
     return jsonify(ok=True, items=items, total=total)
 
 
+def _news_hash(url: str) -> str:
+    import hashlib
+    return hashlib.sha1(url.encode("utf-8")).hexdigest()[:16]
+
+
+@app.get("/api/news/list")
+def api_news_list():
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    import sqlite3
+    try:
+        limit = min(int(request.args.get("limit", "300")), 500)
+    except ValueError:
+        limit = 300
+    filt = (request.args.get("filter") or "").strip().lower()
+    conn = sqlite3.connect(engine.DB_PATH, timeout=15)
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS news_items ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, title TEXT, "
+            "category TEXT, url TEXT UNIQUE, text TEXT, created_at REAL)"
+        )
+        if filt:
+            like = "%" + filt + "%"
+            rows = conn.execute(
+                "SELECT id, date, title, category FROM news_items "
+                "WHERE lower(title) LIKE ? OR lower(text) LIKE ? ORDER BY id DESC LIMIT ?",
+                (like, like, limit),
+            ).fetchall()
+            total = conn.execute(
+                "SELECT COUNT(*) FROM news_items WHERE lower(title) LIKE ? OR lower(text) LIKE ?",
+                (like, like),
+            ).fetchone()[0]
+        else:
+            rows = conn.execute(
+                "SELECT id, date, title, category FROM news_items ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+            total = conn.execute("SELECT COUNT(*) FROM news_items").fetchone()[0]
+        return jsonify(ok=True, total=total, items=[dict(r) for r in rows])
+    finally:
+        conn.close()
+
+
 @app.get("/api/news")
 def api_news():
     if not _authorized():
         return jsonify(ok=False, error="unauthorized"), 401
     import sqlite3
+    try:
+        nid = int(request.args.get("id", "0"))
+    except ValueError:
+        nid = 0
+    if nid <= 0:
+        return jsonify(ok=False, error="bad id"), 400
     conn = sqlite3.connect(engine.DB_PATH, timeout=15)
     conn.row_factory = sqlite3.Row
     try:
         row = conn.execute(
-            "SELECT date, title, url, text FROM news_daily ORDER BY date DESC LIMIT 1"
+            "SELECT id, date, title, category, url, text FROM news_items WHERE id=?", (nid,)
         ).fetchone()
         if not row:
-            return jsonify(ok=False, error="no news yet")
-        audio = APP_ROOT / "data" / "news" / (row["date"] + ".mp3")
+            return jsonify(ok=False, error="not found")
+        h = _news_hash(row["url"])
+        audio = APP_ROOT / "data" / "news" / (h + ".mp3")
         words = []
-        meta = APP_ROOT / "data" / "news" / (row["date"] + ".json")
+        meta = APP_ROOT / "data" / "news" / (h + ".json")
         if meta.is_file():
             try:
                 import json as _json
@@ -294,10 +345,13 @@ def api_news():
                 words = []
         return jsonify(
             ok=True,
+            id=row["id"],
             date=row["date"],
             title=row["title"],
+            category=row["category"],
             url=row["url"],
             text=row["text"],
+            hash=h,
             has_audio=audio.is_file(),
             words=words,
         )
@@ -310,10 +364,10 @@ def api_news_audio():
     if not _authorized():
         abort(401)
     import re as _re2
-    date = (request.args.get("date") or "").strip()
-    if not _re2.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+    h = (request.args.get("h") or "").strip()
+    if not _re2.fullmatch(r"[0-9a-f]{16}", h):
         abort(400)
-    path = APP_ROOT / "data" / "news" / (date + ".mp3")
+    path = APP_ROOT / "data" / "news" / (h + ".mp3")
     if not path.is_file():
         abort(404)
     return Response(path.read_bytes(), mimetype="audio/mpeg")

@@ -129,15 +129,22 @@
 </div>
   
 <div id="newsOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2100;align-items:center;justify-content:center;">
-  <div style="width:min(420px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
+  <div style="width:min(440px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(75vh + 80px);display:flex;flex-direction:column;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
       <strong style="font-size:15px">📰 每日新闻</strong>
       <button type="button" id="newsClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
     </div>
-    <div id="newsBody" style="overflow:auto;flex:1"></div>
-    <div style="display:flex;gap:8px;margin-top:10px;justify-content:center">
-      <button type="button" id="newsPlay" style="border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:4px 14px;font-size:12px;cursor:pointer;color:#5a6472">▶ 播放</button>
-      <button type="button" id="newsStop" style="border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:4px 14px;font-size:12px;cursor:pointer;color:#5a6472;display:none">⏹ 停止</button>
+    <div id="newsListView" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+      <input type="text" id="newsSearch" placeholder="搜索标题或内容…" style="border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:13px;outline:none;margin-bottom:8px">
+      <div id="newsListBody" style="overflow:auto;flex:1"></div>
+    </div>
+    <div id="newsDetailView" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+      <button type="button" id="newsBack" style="align-self:flex-start;border:1px solid var(--line);background:#fff;border-radius:6px;padding:3px 12px;font-size:12px;cursor:pointer;color:#5a6472;margin-bottom:8px">← 返回列表</button>
+      <div id="newsDetailBody" style="overflow:auto;flex:1"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;justify-content:center">
+        <button type="button" id="newsPlay" style="border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:4px 14px;font-size:12px;cursor:pointer;color:#5a6472">▶ 播放</button>
+        <button type="button" id="newsStop" style="border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:4px 14px;font-size:12px;cursor:pointer;color:#5a6472;display:none">⏹ 停止</button>
+      </div>
     </div>
   </div>
 </div>
@@ -458,14 +465,18 @@ document.getElementById('mvPlay').addEventListener('click', function () {
 document.getElementById('mvStop').addEventListener('click', mvStopPlay);
 
 var newsOverlay = document.getElementById('newsOverlay');
-var newsBody = document.getElementById('newsBody');
+var newsListBody = document.getElementById('newsListBody');
+var newsDetailBody = document.getElementById('newsDetailBody');
+var newsListView = document.getElementById('newsListView');
+var newsDetailView = document.getElementById('newsDetailView');
 var newsAudio = null;
 var newsPlaying = false;
 var newsPaused = false;
-var newsDate = '';
+var newsHash = '';
+var newsFilter = '';
+var newsSearchTimer = null;
 var newsWords = [];
 var newsWT = [];
-var newsMarks = [];
 var newsCurIdx = -1;
 function newsClearHi() {
   for (var i = 0; i < newsWords.length; i++) newsWords[i].style.background = '';
@@ -525,53 +536,105 @@ function newsStopPlay() {
   document.getElementById('newsStop').style.display = 'none';
   newsClearHi();
 }
-function newsLoad() {
+function newsShowList() {
   newsStopPlay();
-  newsBody.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
-  var u = 'api/news?token=' + encodeURIComponent(window.API_TOKEN || '');
-  fetch(u, { credentials: 'same-origin' })
+  newsDetailView.style.display = 'none';
+  newsListView.style.display = 'flex';
+}
+function newsShowDetail() {
+  newsListView.style.display = 'none';
+  newsDetailView.style.display = 'flex';
+}
+function newsApi(path) {
+  return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(window.API_TOKEN || '');
+}
+function newsLoadList() {
+  newsShowList();
+  newsListBody.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
+  var base = 'api/news/list?limit=300';
+  if (newsFilter) base = base + '&filter=' + encodeURIComponent(newsFilter);
+  fetch(newsApi(base), { credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
     .then(function (d) {
       if (!d || !d.ok) {
-        newsBody.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">暂无新闻' + ((d && d.error) ? '：' + esc(String(d.error)) : '') + '</div>';
+        newsListBody.innerHTML = '<div style="color:#b02a37;font-size:13px;text-align:center;padding:16px">加载失败' + ((d && d.error) ? '：' + esc(String(d.error)) : '') + '</div>';
         return;
       }
-      newsDate = d.date;
+      var items = d.items || [];
+      if (!items.length) {
+        newsListBody.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">' + (newsFilter ? '没有匹配的新闻' : '暂无新闻') + '</div>';
+        return;
+      }
+      newsListBody.innerHTML = items.map(function (it) {
+        return '<div data-nid="' + it.id + '" style="padding:10px 6px;border-bottom:1px dashed #dde4ec;cursor:pointer">' +
+          '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center">' +
+          '<span style="font-size:11px;color:#fff;background:#7048a8;border-radius:4px;padding:1px 7px;flex-shrink:0">' + esc(it.category || '日常') + '</span>' +
+          '<span style="font-size:10px;color:#5a6472;flex-shrink:0">' + esc(it.date || '') + '</span></div>' +
+          '<div style="font-size:13px;line-height:1.5;color:#1f2630;margin-top:4px">' + esc(it.title || '') + '</div></div>';
+      }).join('');
+    })
+    .catch(function () { newsListBody.innerHTML = '<div style="color:#b02a37;font-size:13px;text-align:center;padding:16px">加载失败</div>'; });
+}
+newsListBody.addEventListener('click', function (e) {
+  var el = e.target && e.target.closest ? e.target.closest('[data-nid]') : null;
+  if (!el) return;
+  var id = parseInt(el.getAttribute('data-nid'), 10);
+  if (!id) return;
+  newsLoadDetail(id);
+});
+function newsLoadDetail(id) {
+  newsStopPlay();
+  newsShowDetail();
+  newsHash = '';
+  newsDetailBody.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
+  fetch(newsApi('api/news?id=' + id), { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d || !d.ok) {
+        newsDetailBody.innerHTML = '<div style="color:#b02a37;font-size:13px;text-align:center;padding:16px">加载失败' + ((d && d.error) ? '：' + esc(String(d.error)) : '') + '</div>';
+        return;
+      }
+      newsHash = d.hash || '';
       var wds = (d.text || '').replace(/\s+/g, ' ').trim().split(' ');
-      newsBody.innerHTML =
-        '<div style="font-size:15px;font-weight:600;line-height:1.5;color:#1f2630">' + esc(d.title) + '</div>' +
-        '<div style="font-size:11px;color:#5a6472;margin:4px 0 10px">' + esc(d.date) + ' · <a href="' + esc(d.url) + '" target="_blank" style="color:#7048a8">CNN 原文</a></div>' +
+      newsDetailBody.innerHTML =
+        '<div style="font-size:15px;font-weight:600;line-height:1.5;color:#1f2630">' + esc(d.title || '') + '</div>' +
+        '<div style="font-size:11px;color:#5a6472;margin:4px 0 10px"><span style="color:#7048a8">[' + esc(d.category || '') + ']</span> ' + esc(d.date || '') + ' · <a href="' + esc(d.url || '') + '" target="_blank" style="color:#7048a8">CNN 原文</a></div>' +
         '<div id="newsText" style="font-size:14px;line-height:1.8;color:#1f2630">' + wds.map(function (w) {
           return '<span data-nw="1" style="border-radius:3px">' + esc(w) + '</span> ';
         }).join('') + '</div>';
-      newsWords = Array.prototype.slice.call(newsBody.querySelectorAll('[data-nw]'));
-      newsMarks = (d && d.words) || [];
-      newsWT = newsAlign(newsWords.map(function (el) { return el.textContent; }), newsMarks);
+      newsWords = Array.prototype.slice.call(newsDetailBody.querySelectorAll('[data-nw]'));
+      newsWT = newsAlign(newsWords.map(function (el) { return el.textContent; }), (d && d.words) || []);
       newsClearHi();
     })
-    .catch(function () { newsBody.innerHTML = '<div style="color:#b02a37;font-size:13px;text-align:center;padding:16px">加载失败</div>'; });
+    .catch(function () { newsDetailBody.innerHTML = '<div style="color:#b02a37;font-size:13px;text-align:center;padding:16px">加载失败</div>'; });
 }
 document.getElementById('newsBtn').addEventListener('click', function () {
   newsOverlay.style.display = 'flex';
-  newsLoad();
+  newsLoadList();
 });
 document.getElementById('newsClose').addEventListener('click', function () { newsStopPlay(); newsOverlay.style.display = 'none'; });
 newsOverlay.addEventListener('click', function (e) { if (e.target === newsOverlay) { newsStopPlay(); newsOverlay.style.display = 'none'; } });
+document.getElementById('newsBack').addEventListener('click', function () { newsShowList(); });
+document.getElementById('newsSearch').addEventListener('input', function () {
+  var v = this.value;
+  if (newsSearchTimer) clearTimeout(newsSearchTimer);
+  newsSearchTimer = setTimeout(function () { newsFilter = v.trim().toLowerCase(); newsLoadList(); }, 300);
+});
 document.getElementById('newsPlay').addEventListener('click', function () {
   if (newsPlaying && !newsPaused) { newsPaused = true; if (newsAudio) { try { newsAudio.pause(); } catch (e) {} } this.textContent = '▶ 继续'; return; }
   if (newsPlaying && newsPaused) { newsPaused = false; this.textContent = '⏸ 暂停'; if (newsAudio) { newsAudio.play().catch(function () {}); } return; }
-  if (!newsDate) return;
+  if (!newsHash) return;
   newsPlaying = true; newsPaused = false;
   this.textContent = '⏸ 暂停';
   document.getElementById('newsStop').style.display = '';
-  newsAudio = new Audio('api/news/audio?date=' + encodeURIComponent(newsDate) + '&token=' + encodeURIComponent(window.API_TOKEN || ''));
+  newsAudio = new Audio(newsApi('api/news/audio?h=' + encodeURIComponent(newsHash)));
   newsAudio.onended = newsStopPlay;
   newsAudio.onerror = newsStopPlay;
   newsAudio.addEventListener('timeupdate', function () {
     if (!newsPlaying || newsPaused || !newsAudio) return;
     var t = newsAudio.currentTime + 0.08;
     var k = -1, j;
-    for (j = 0; j < newsWT.length; j++) { if (newsWT[j] !== null && newsWT[j] <= t) k = j; }
+    for (j = 0; j < newsWT.length; j++) { if (newsWT[j] !== null && newsWT[j] !== undefined && newsWT[j] <= t) k = j; }
     newsHi(k);
   });
   newsAudio.play().catch(function () { newsStopPlay(); });

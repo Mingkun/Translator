@@ -1,15 +1,35 @@
 #!/usr/bin/env python3
-"""Daily CNN news fetcher for Translator: pick one article, extract text, generate TTS audio."""
-import asyncio, re, sqlite3, sys, time, urllib.request
+"""Daily CNN news fetcher: multiple articles/day across categories, TTS audio + word timings."""
+import asyncio, hashlib, json, re, sqlite3, time, urllib.request
 from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DB_PATH = ROOT / 'data' / 'cache.db'
-AUDIO_DIR = ROOT / 'data' / 'news'
+DB = ROOT / 'data' / 'cache.db'
+NEWS = ROOT / 'data' / 'news'
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+PER_DAY = 6
 SKIP_PREFIX = ('read more', 'related article', 'this story', 'sign up', 'listen to',
                'click here', 'follow cnn', 'see more', 'the-cnn', 'contributed')
+CATEGORY_MAP = {
+    'tech': '科技', 'science': '科技', 'business': '经济', 'politics': '政治',
+    'health': '健康', 'style': '生活', 'travel': '生活', 'entertainment': '生活', 'media': '生活',
+    'sport': '体育', 'football': '体育',
+    'world': '国际', 'europe': '国际', 'americas': '国际', 'asia': '国际', 'middleeast': '国际', 'africa': '国际',
+    'us': '国际',
+}
+CAT_ORDER = ['科技', '经济', '国际', '政治', '健康', '生活', '体育', '日常']
+
+
+def urlhash(u):
+    return hashlib.sha1(u.encode('utf-8')).hexdigest()[:16]
+
+
+def cat_of(u):
+    m = re.search(r'/20\d\d/\d\d/\d\d/([^/]+)/', u)
+    if not m:
+        return '日常'
+    return CATEGORY_MAP.get(m.group(1), '日常')
 
 
 def fetch(url):
@@ -23,21 +43,18 @@ def strip_tags(s):
     return re.sub(r'\s+', ' ', s).strip()
 
 
-def pick_article():
+def homepage_candidates():
     html = fetch('https://lite.cnn.com')
     links = re.findall(r'<a[^>]+href="(/20\d\d/\d\d/\d\d/[^"]+)"[^>]*>\s*([^<]{10,150}?)\s*</a>', html)
-    seen, cands = set(), []
-    for u, t in links:
+    seen, out = set(), []
+    for u, _t in links:
         if u in seen:
             continue
         seen.add(u)
         if re.search(r'/video/|/live/|/photos/|/videos/|/interactive/', u):
             continue
-        cands.append(('https://lite.cnn.com' + u, t))
-    if not cands:
-        raise RuntimeError('no article candidates')
-    idx = int(datetime.now().strftime('%Y%m%d')) % min(len(cands), 12)
-    return cands[idx]
+        out.append('https://lite.cnn.com' + u)
+    return out
 
 
 def extract(url):
@@ -70,7 +87,6 @@ def extract(url):
 
 def tts(text, audio_path, meta_path):
     import edge_tts
-    import json
 
     async def run():
         com = edge_tts.Communicate(text, 'en-US-GuyNeural', boundary='WordBoundary')
@@ -89,30 +105,82 @@ def tts(text, audio_path, meta_path):
     asyncio.run(run())
 
 
-def main():
-    today = datetime.now().strftime('%Y-%m-%d')
-    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=15)
-    conn.execute('CREATE TABLE IF NOT EXISTS news_daily (date TEXT PRIMARY KEY, title TEXT, url TEXT, text TEXT, created_at REAL)')
-    row = conn.execute('SELECT title, text FROM news_daily WHERE date=?', (today,)).fetchone()
-    audio = AUDIO_DIR / (today + '.mp3')
-    meta = AUDIO_DIR / (today + '.json')
-    if row and audio.is_file() and audio.stat().st_size > 1000 and meta.is_file():
-        print('EXISTS', today, '|', row[0][:60])
-        conn.close()
+def ensure_schema(conn):
+    conn.execute('CREATE TABLE IF NOT EXISTS news_items ('
+                 'id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, title TEXT, '
+                 'category TEXT, url TEXT UNIQUE, text TEXT, created_at REAL)')
+
+
+def migrate_legacy(conn):
+    has = conn.execute("SELECT name FROM sqlite_master WHERE name='news_daily'").fetchone()
+    if not has:
         return
-    url, _t = pick_article()
-    title, text = extract(url)
-    if len(text) < 200:
-        raise RuntimeError('article text too short: %d' % len(text))
-    tts(text, audio, meta)
-    if not audio.is_file() or audio.stat().st_size < 1000 or not meta.is_file():
-        raise RuntimeError('tts output empty')
-    conn.execute('INSERT OR REPLACE INTO news_daily (date, title, url, text, created_at) VALUES (?,?,?,?,?)',
-                 (today, title, url, text, time.time()))
+    for date, title, url, text in conn.execute('SELECT date, title, url, text FROM news_daily'):
+        try:
+            conn.execute('INSERT OR IGNORE INTO news_items (date,title,category,url,text,created_at) VALUES (?,?,?,?,?,?)',
+                         (date, title, cat_of(url), url, text, time.time()))
+            h = urlhash(url)
+            old_a, old_j = NEWS / (date + '.mp3'), NEWS / (date + '.json')
+            if old_a.is_file() and not (NEWS / (h + '.mp3')).is_file():
+                old_a.rename(NEWS / (h + '.mp3'))
+            if old_j.is_file() and not (NEWS / (h + '.json')).is_file():
+                old_j.rename(NEWS / (h + '.json'))
+        except Exception:
+            pass
     conn.commit()
+
+
+def main():
+    NEWS.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB, timeout=15)
+    ensure_schema(conn)
+    conn.commit()
+    migrate_legacy(conn)
+    have = set(r[0] for r in conn.execute('SELECT url FROM news_items'))
+    cands = [u for u in homepage_candidates() if u not in have]
+    by_cat = {}
+    for u in cands:
+        by_cat.setdefault(cat_of(u), []).append(u)
+    picked = []
+    while len(picked) < PER_DAY:
+        added = False
+        for c in CAT_ORDER:
+            bucket = by_cat.get(c) or []
+            while bucket:
+                u = bucket.pop(0)
+                if u not in picked:
+                    picked.append(u)
+                    added = True
+                    break
+            if len(picked) >= PER_DAY:
+                break
+        if not added:
+            break
+    today = datetime.now().strftime('%Y-%m-%d')
+    ok = 0
+    for u in picked:
+        try:
+            title, text = extract(u)
+            if len(text) < 200:
+                print('SKIP short', u[:60])
+                continue
+            h = urlhash(u)
+            ap, jp = NEWS / (h + '.mp3'), NEWS / (h + '.json')
+            if not (ap.is_file() and jp.is_file()):
+                tts(text, ap, jp)
+            if not (ap.is_file() and ap.stat().st_size > 1000):
+                print('SKIP tts', u[:60])
+                continue
+            conn.execute('INSERT OR IGNORE INTO news_items (date,title,category,url,text,created_at) VALUES (?,?,?,?,?,?)',
+                         (today, title, cat_of(u), u, text, time.time()))
+            conn.commit()
+            ok += 1
+            print('ADDED [%s] %s' % (cat_of(u), title[:60]))
+        except Exception as e:
+            print('FAIL', u[:60], str(e)[:80])
+    total = conn.execute('SELECT COUNT(*) FROM news_items').fetchone()[0]
     conn.close()
-    print('OK', today, '|', title[:70], '|', len(text), 'chars |', audio.stat().st_size, 'B')
+    print('DONE +%d today, %d total' % (ok, total))
 
 
 if __name__ == '__main__':
