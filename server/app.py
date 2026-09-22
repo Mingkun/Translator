@@ -285,6 +285,7 @@ def api_news_list():
     except ValueError:
         limit = 300
     filt = (request.args.get("filter") or "").strip().lower()
+    cat = (request.args.get("category") or "").strip()
     conn = sqlite3.connect(engine.DB_PATH, timeout=15)
     conn.row_factory = sqlite3.Row
     try:
@@ -293,22 +294,22 @@ def api_news_list():
             "id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, title TEXT, "
             "category TEXT, url TEXT UNIQUE, text TEXT, created_at REAL)"
         )
+        cond, args = [], []
         if filt:
             like = "%" + filt + "%"
-            rows = conn.execute(
-                "SELECT id, date, title, category FROM news_items "
-                "WHERE lower(title) LIKE ? OR lower(text) LIKE ? ORDER BY id DESC LIMIT ?",
-                (like, like, limit),
-            ).fetchall()
-            total = conn.execute(
-                "SELECT COUNT(*) FROM news_items WHERE lower(title) LIKE ? OR lower(text) LIKE ?",
-                (like, like),
-            ).fetchone()[0]
-        else:
-            rows = conn.execute(
-                "SELECT id, date, title, category FROM news_items ORDER BY id DESC LIMIT ?", (limit,)
-            ).fetchall()
-            total = conn.execute("SELECT COUNT(*) FROM news_items").fetchone()[0]
+            cond.append("(lower(title) LIKE ? OR lower(text) LIKE ?)")
+            args += [like, like]
+        if cat:
+            cond.append("category = ?")
+            args.append(cat)
+        where = (" WHERE " + " AND ".join(cond)) if cond else ""
+        rows = conn.execute(
+            "SELECT id, date, title, category FROM news_items" + where + " ORDER BY id DESC LIMIT ?",
+            args + [limit],
+        ).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) FROM news_items" + where, args
+        ).fetchone()[0]
         return jsonify(ok=True, total=total, items=[dict(r) for r in rows])
     finally:
         conn.close()

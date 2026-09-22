@@ -147,6 +147,7 @@
     </div>
     <div id="newsListView" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
       <input type="text" id="newsSearch" placeholder="搜索标题或内容…" style="border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:13px;outline:none;margin-bottom:8px">
+      <div id="newsCats" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:8px;flex-shrink:0"></div>
       <div id="newsListBody" style="overflow:auto;flex:1"></div>
     </div>
     <div id="newsDetailView" style="display:none;flex-direction:column;flex:1;overflow:hidden">
@@ -486,6 +487,7 @@ var newsPaused = false;
 var newsHash = '';
 var newsAudioSrc = '';
 var newsFilter = '';
+var newsCat = '';
 var newsSearchTimer = null;
 var newsWords = [];
 var newsWT = [];
@@ -560,11 +562,30 @@ function newsShowDetail() {
 function newsApi(path) {
   return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(window.API_TOKEN || '');
 }
+var NEWS_CATS = ['全部', '播客', '科技', '经济', '国际', '政治', '健康', '生活', '体育', '日常'];
+function newsRenderCats() {
+  var box = document.getElementById('newsCats');
+  if (!box) return;
+  box.innerHTML = NEWS_CATS.map(function (c) {
+    var on = (c === '全部' && !newsCat) || c === newsCat;
+    return '<button type="button" data-cat="' + c + '" style="flex-shrink:0;border:1px solid var(--line);border-radius:14px;padding:3px 12px;font-size:12px;cursor:pointer;background:' + (on ? '#e8590c' : '#f0f4fa') + ';color:' + (on ? '#fff' : '#5a6472') + '">' + c + '</button>';
+  }).join('');
+}
+document.getElementById('newsCats').addEventListener('click', function (e) {
+  var el = e.target && e.target.closest ? e.target.closest('[data-cat]') : null;
+  if (!el) return;
+  var c = el.getAttribute('data-cat');
+  newsCat = (c === '全部') ? '' : c;
+  newsRenderCats();
+  newsLoadList();
+});
 function newsLoadList() {
   newsShowList();
+  newsRenderCats();
   newsListBody.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
   var base = 'api/news/list?limit=300';
   if (newsFilter) base = base + '&filter=' + encodeURIComponent(newsFilter);
+  if (newsCat) base = base + '&category=' + encodeURIComponent(newsCat);
   fetch(newsApi(base), { credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
     .then(function (d) {
