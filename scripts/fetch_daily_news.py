@@ -185,7 +185,7 @@ def fetch_podcasts(conn):
                             model = WhisperModel('base', device='cpu', compute_type='int8', cpu_threads=2)
                         transcript = transcribe_one(mp3, jp, model)
                         if transcript:
-                            conn.execute('UPDATE news_items SET text=? WHERE url=?', (transcript[:5000], mp3))
+                            conn.execute('UPDATE news_items SET text=? WHERE url=?', (transcript[:30000], mp3))
                             conn.commit()
                             print('TRANSCRIPT %s (%d chars)' % (title[:40], len(transcript)))
                     except Exception as e:
