@@ -571,12 +571,12 @@ function newsPaginate() {
   var headH = (headEl && headEl !== textEl) ? Math.max(0, textEl.offsetTop - headEl.offsetTop) : 0;
   var total = Math.max(240, body.clientHeight - 8);
   var base = spans[0].offsetTop;
-  var cap0 = Math.max(120, total - headH);
+  var cap0 = Math.max(120, total - headH - 30);
   var pages = [];
   for (var i = 0; i < spans.length; i++) {
     var rel = spans[i].offsetTop - base;
     var pg = 0;
-    if (rel > cap0) pg = 1 + Math.floor((rel - cap0) / total);
+    if (rel > cap0) pg = 1 + Math.floor((rel - cap0) / (total - 30));
     if (!pages[pg]) pages[pg] = [];
     pages[pg].push(spans[i].outerHTML);
   }
