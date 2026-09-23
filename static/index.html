@@ -561,24 +561,36 @@ function newsPaginate() {
   if (!body || !textEl) return;
   var spans = textEl.querySelectorAll('[data-nw]');
   if (!spans.length) return;
+  var headHtml = '';
+  var child = body.firstElementChild;
+  while (child && child !== textEl) {
+    headHtml += child.outerHTML;
+    child = child.nextElementSibling;
+  }
+  var headEl = body.firstElementChild;
+  var headH = (headEl && headEl !== textEl) ? Math.max(0, textEl.offsetTop - headEl.offsetTop) : 0;
+  var total = Math.max(240, body.clientHeight - 8);
   var base = spans[0].offsetTop;
-  var pageH = Math.max(220, body.clientHeight - base - 8);
+  var cap0 = Math.max(120, total - headH);
   var pages = [];
   for (var i = 0; i < spans.length; i++) {
     var rel = spans[i].offsetTop - base;
-    var pg = Math.floor(rel / pageH);
+    var pg = 0;
+    if (rel > cap0) pg = 1 + Math.floor((rel - cap0) / total);
     if (!pages[pg]) pages[pg] = [];
     pages[pg].push(spans[i].outerHTML);
   }
   var html = '';
-  for (var p = 0; p < pages.length; p++) {
-    html += '<div class="npage" data-page="' + p + '" style="display:' + (p === 0 ? 'block' : 'none') + ';min-height:' + pageH + 'px">' + pages[p].join(' ') + '</div>';
+  for (var q = 0; q < pages.length; q++) {
+    var inner = (q === 0 ? headHtml : '') + pages[q].join(' ');
+    html += '<div class="npage" data-page="' + q + '" style="display:' + (q === 0 ? 'block' : 'none') + ';min-height:' + total + 'px">' + inner + '</div>';
   }
   var wrap = document.createElement('div');
   wrap.id = 'newsPageWrap';
   wrap.style.perspective = '1400px';
   wrap.innerHTML = html;
-  textEl.parentNode.replaceChild(wrap, textEl);
+  while (body.firstElementChild && body.firstElementChild !== textEl) body.removeChild(body.firstElementChild);
+  body.replaceChild(wrap, textEl);
 }
 function newsNormW(s) {
   return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
