@@ -566,12 +566,18 @@ function newsFlipTo(pg) {
   var from = pages[newsPageCur];
   if (!from) { newsHardSwitch(pg); return; }
   newsFlipping = true;
+  if (newsAudio && newsPlaying && !newsPaused) {
+    try { newsAudio.pause(); } catch (e) {}
+  }
   to.style.display = 'block';
   to.classList.add('npage-in');
   newsShatter(from, function () {
     to.classList.remove('npage-in');
     newsPageCur = pg;
     newsFlipping = false;
+    if (newsAudio && newsPlaying && !newsPaused) {
+      newsAudio.play().catch(function () {});
+    }
   });
 }
 function newsPaginate() {
