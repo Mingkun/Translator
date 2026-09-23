@@ -511,8 +511,24 @@ function ensureNewsPage(el) {
   var et = el.getBoundingClientRect();
   if (et.bottom > bt.bottom - 8 || et.top < bt.top + 8) {
     var target = Math.max(0, box.scrollTop + (et.top - bt.top) - 10);
-    try { box.scrollTo({ top: target, behavior: 'smooth' }); } catch (e) { box.scrollTop = target; }
+    bookFlipTo(box, target);
   }
+}
+function bookFlipTo(box, target) {
+  var flipEl = document.getElementById('newsText');
+  if (!flipEl) { box.scrollTop = target; return; }
+  try {
+    flipEl.style.transformOrigin = 'center top';
+    flipEl.style.transition = 'transform .22s ease-in, opacity .22s ease-in';
+    flipEl.style.transform = 'perspective(1200px) rotateX(12deg) scale(.98)';
+    flipEl.style.opacity = '0.55';
+    setTimeout(function () {
+      box.scrollTop = target;
+      flipEl.style.transition = 'transform .3s ease-out, opacity .3s ease-out';
+      flipEl.style.transform = 'none';
+      flipEl.style.opacity = '1';
+    }, 220);
+  } catch (e) { box.scrollTop = target; }
 }
 function newsNormW(s) {
   return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
