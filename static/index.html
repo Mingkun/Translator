@@ -501,8 +501,18 @@ function newsHi(k) {
   if (k < 0 || k >= newsWords.length) { newsCurIdx = -1; return; }
   var from = (newsCurIdx >= 0 && k > newsCurIdx) ? newsCurIdx + 1 : 0;
   for (var i = from; i <= k; i++) newsWords[i].style.background = '#fff3d6';
-  try { newsWords[k].scrollIntoView({ block: 'nearest' }); } catch (e) {}
+  ensureNewsPage(newsWords[k]);
   newsCurIdx = k;
+}
+function ensureNewsPage(el) {
+  var box = document.getElementById('newsDetailBody');
+  if (!box || !el) return;
+  var bt = box.getBoundingClientRect();
+  var et = el.getBoundingClientRect();
+  if (et.bottom > bt.bottom - 8 || et.top < bt.top + 8) {
+    var target = Math.max(0, box.scrollTop + (et.top - bt.top) - 10);
+    try { box.scrollTo({ top: target, behavior: 'smooth' }); } catch (e) { box.scrollTop = target; }
+  }
 }
 function newsNormW(s) {
   return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
