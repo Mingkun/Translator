@@ -38,7 +38,7 @@
   .empty { color:var(--muted); font-size:14px; text-align:center; padding:30px 0; }
   .movie-tag { font-size:10px; color:#fff; background:#8746a8; border-radius:4px; padding:1px 5px; margin-left:6px; }
   .npage { position: absolute; top: 0; left: 0; right: 0; background: #fff; transform-origin: left center; font-size: 14px; line-height: 1.8; color: #1f2630; overflow: hidden; }
-  .npage-in { animation: npageIn .45s ease-out; }
+  .npage-in { animation: npageIn .6s ease-out; }
   @keyframes npageIn {
     0% { transform: scale(1.018); opacity: .55; }
     100% { transform: scale(1); opacity: 1; }
@@ -550,9 +550,9 @@ function newsShatter(pgEl, done) {
         var dx = (c - cols / 2 + 0.5) * (40 + Math.random() * 70);
         var dy = (r - rows / 2 + 0.5) * (25 + Math.random() * 45) + 140;
         var rot = (Math.random() - 0.5) * 200;
-        var delay = 10 + Math.random() * 80;
+        var delay = 15 + Math.random() * 100;
         setTimeout(function () {
-          shard.style.transition = 'transform .38s cubic-bezier(.3,.55,.7,1), opacity .38s ease-in';
+          shard.style.transition = 'transform .6s cubic-bezier(.3,.55,.7,1), opacity .6s ease-in';
           shard.style.transform = 'translate(' + dx + 'px,' + dy + 'px) rotate(' + rot + 'deg) scale(.6)';
           shard.style.opacity = '0';
         }, delay);
@@ -563,7 +563,7 @@ function newsShatter(pgEl, done) {
   setTimeout(function () {
     if (holder.parentNode) holder.parentNode.removeChild(holder);
     if (done) done();
-  }, 500);
+  }, 750);
 }
 function newsFlipTo(pg) {
   var body = document.getElementById('newsDetailBody');
