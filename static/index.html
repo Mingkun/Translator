@@ -787,9 +787,9 @@ var newsTapCount = 0, newsTapTimer = null;
 newsDetailBody.addEventListener('click', function (e) {
   if (e.target && e.target.closest && e.target.closest('a')) return;
   var w = e.target && e.target.closest ? e.target.closest('[data-nw]') : null;
-  if (w) { newsLookupWord(w); return; }
   newsTapCount++;
   if (newsTapCount === 1) {
+    if (w) newsLookupWord(w);
     newsTapTimer = setTimeout(function () { newsTapTimer = null; newsTapCount = 0; }, 320);
   } else {
     if (newsTapTimer) { clearTimeout(newsTapTimer); newsTapTimer = null; }
