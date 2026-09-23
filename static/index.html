@@ -536,7 +536,7 @@ function newsShatter(pgEl, done) {
   var holder = document.createElement('div');
   holder.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;pointer-events:none;z-index:5';
   pgEl.parentNode.appendChild(holder);
-  var cols = 5, rows = 7;
+  var cols = 10, rows = 20;
   var sw = rect.width / cols, sh = rect.height / rows;
   for (var r = 0; r < rows; r++) {
     for (var c = 0; c < cols; c++) {
@@ -776,6 +776,19 @@ document.getElementById('newsBtn').addEventListener('click', function () {
 document.getElementById('newsClose').addEventListener('click', function () { newsStopPlay(); newsOverlay.style.display = 'none'; });
 newsOverlay.addEventListener('click', function (e) { if (e.target === newsOverlay) { newsStopPlay(); newsOverlay.style.display = 'none'; } });
 document.getElementById('newsBack').addEventListener('click', function () { newsShowList(); });
+newsDetailBody.addEventListener('click', function (e) {
+  if (e.target && e.target.closest && e.target.closest('a')) return;
+  if (!newsPlaying) return;
+  if (!newsPaused) {
+    newsPaused = true;
+    if (newsAudio) { try { newsAudio.pause(); } catch (err) {} }
+    document.getElementById('newsPlay').textContent = '▶ 继续';
+  } else {
+    newsPaused = false;
+    document.getElementById('newsPlay').textContent = '⏸ 暂停';
+    if (newsAudio) { newsAudio.play().catch(function () {}); }
+  }
+});
 document.getElementById('newsSearch').addEventListener('input', function () {
   var v = this.value;
   if (newsSearchTimer) clearTimeout(newsSearchTimer);
