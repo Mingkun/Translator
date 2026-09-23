@@ -783,19 +783,27 @@ document.getElementById('newsBtn').addEventListener('click', function () {
 document.getElementById('newsClose').addEventListener('click', function () { newsStopPlay(); newsOverlay.style.display = 'none'; });
 newsOverlay.addEventListener('click', function (e) { if (e.target === newsOverlay) { newsStopPlay(); newsOverlay.style.display = 'none'; } });
 document.getElementById('newsBack').addEventListener('click', function () { newsShowList(); });
+var newsTapCount = 0, newsTapTimer = null;
 newsDetailBody.addEventListener('click', function (e) {
   if (e.target && e.target.closest && e.target.closest('a')) return;
   var w = e.target && e.target.closest ? e.target.closest('[data-nw]') : null;
   if (w) { newsLookupWord(w); return; }
-  if (!newsPlaying) return;
-  if (!newsPaused) {
-    newsPaused = true;
-    if (newsAudio) { try { newsAudio.pause(); } catch (err) {} }
-    document.getElementById('newsPlay').textContent = '▶ 继续';
+  newsTapCount++;
+  if (newsTapCount === 1) {
+    newsTapTimer = setTimeout(function () { newsTapTimer = null; newsTapCount = 0; }, 320);
   } else {
-    newsPaused = false;
-    document.getElementById('newsPlay').textContent = '⏸ 暂停';
-    if (newsAudio) { newsAudio.play().catch(function () {}); }
+    if (newsTapTimer) { clearTimeout(newsTapTimer); newsTapTimer = null; }
+    newsTapCount = 0;
+    if (!newsPlaying) return;
+    if (!newsPaused) {
+      newsPaused = true;
+      if (newsAudio) { try { newsAudio.pause(); } catch (err) {} }
+      document.getElementById('newsPlay').textContent = '▶ 继续';
+    } else {
+      newsPaused = false;
+      document.getElementById('newsPlay').textContent = '⏸ 暂停';
+      if (newsAudio) { newsAudio.play().catch(function () {}); }
+    }
   }
 });
 var newsTouchX = 0, newsTouchY = 0;
