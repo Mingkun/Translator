@@ -22,4 +22,5 @@ windows-app/dist/
 windows-app/node_modules/
 
 # 下载目录（运行时产物）
-static/downloads/
+static/downloads/*
+!static/downloads/translator-version.json

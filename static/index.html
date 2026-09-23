@@ -142,6 +142,14 @@
       <button type="button" id="playLoop" style="border:1px solid var(--line);background:#fff;color:var(--text);border-radius:20px;padding:4px 18px;font-size:13px;cursor:pointer">关</button>
     </div>
     </div>
+    <div style="font-size:12px;color:var(--muted);font-weight:600;margin:14px 2px 6px">🔄 版本与更新</div>
+    <div style="background:#f6f8fb;border:1px solid #e3e8ef;border-radius:10px;padding:2px 12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
+        <span style="font-size:14px;">当前版本 <span id="trVer" style="font-size:12px;color:#5a6472">…</span></span>
+        <button type="button" id="trCheckUp" style="border:none;background:#e8590c;color:#fff;border-radius:8px;padding:5px 14px;font-size:12px;cursor:pointer">检查更新</button>
+      </div>
+      <div id="trUpInfo" style="font-size:12px;color:#5a6472;border-top:1px dashed #e3e8ef;padding:8px 0 10px"></div>
+    </div>
   </div>
 </div>
   
@@ -853,6 +861,29 @@ function updateLoopUI() {
 updateLoopUI();
 updatePlayModeUI();
 document.getElementById('sysBtn').addEventListener('click', function () { sysOverlay.style.display = 'flex'; });
+function trLoadVer() {
+  fetch('downloads/translator-version.json?t=' + Date.now())
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var el = document.getElementById('trVer');
+      if (el && d && d.versionName) el.textContent = 'v' + d.versionName + (d.date ? ' · ' + d.date : '');
+    }).catch(function () {});
+}
+if (document.getElementById('trCheckUp')) document.getElementById('trCheckUp').addEventListener('click', function () {
+  var info = document.getElementById('trUpInfo');
+  info.textContent = '检查中…';
+  fetch('downloads/translator-version.json?t=' + Date.now())
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d || !d.versionName) { info.textContent = '检查失败'; return; }
+      var last = localStorage.getItem('tr_seenVer') || '';
+      var isNew = String(d.versionName) !== last;
+      info.innerHTML = '最新版本 v' + esc(String(d.versionName)) + (isNew ? ' 🆕' : '') + (d.note ? '<br>更新内容：' + esc(String(d.note)) : '') + '<br><a href="downloads/translator-android-debug.apk" style="color:#7048a8">安卓客户端</a> · <a href="downloads/translator-windows-x64.zip" style="color:#7048a8">Windows 客户端</a>';
+      localStorage.setItem('tr_seenVer', String(d.versionName));
+    })
+    .catch(function () { info.textContent = '检查失败，请稍后重试'; });
+});
+trLoadVer();
 document.getElementById('sysClose').addEventListener('click', function () { sysOverlay.style.display = 'none'; });
 sysOverlay.addEventListener('click', function (e) { if (e.target === sysOverlay) sysOverlay.style.display = 'none'; });
 function render(d){
