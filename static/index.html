@@ -795,6 +795,31 @@ newsDetailBody.addEventListener('click', function (e) {
     if (newsAudio) { newsAudio.play().catch(function () {}); }
   }
 });
+var newsTouchX = 0, newsTouchY = 0;
+newsDetailBody.addEventListener('touchstart', function (e) {
+  if (e.touches.length === 1) { newsTouchX = e.touches[0].clientX; newsTouchY = e.touches[0].clientY; }
+}, { passive: true });
+newsDetailBody.addEventListener('touchend', function (e) {
+  if (e.changedTouches.length !== 1) return;
+  var dx = e.changedTouches[0].clientX - newsTouchX;
+  var dy = e.changedTouches[0].clientY - newsTouchY;
+  if (Math.abs(dx) <= 50 || Math.abs(dx) <= Math.abs(dy) * 1.5) return;
+  var dir = dx < 0 ? 1 : -1;
+  var target = newsPageCur + dir;
+  var pages = newsDetailBody.querySelectorAll('.npage');
+  if (target < 0 || target >= pages.length) return;
+  if (newsAudio && newsWT.length) {
+    var spans = pages[target].querySelectorAll('[data-nw]');
+    for (var i = 0; i < spans.length; i++) {
+      var idx = newsWords.indexOf(spans[i]);
+      if (idx >= 0 && newsWT[idx] !== null && newsWT[idx] !== undefined) {
+        try { newsAudio.currentTime = Math.max(0, newsWT[idx] - 0.05); } catch (err) {}
+        break;
+      }
+    }
+  }
+  newsFlipTo(target);
+}, { passive: true });
 var newsWordAudio = null, newsWordWasPlaying = false;
 function newsBindWordClose() {
   var cb = document.getElementById('newsWordClose');
