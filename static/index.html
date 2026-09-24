@@ -92,6 +92,10 @@
         <div><div>Windows 客户端</div><div style="font-size:11px;color:var(--muted)">ZIP 免安装绿色版</div></div>
       </a>
     </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:8px 2px 6px;">
+      <span style="font-size:13px;color:var(--text)">👤 <span id="userName">…</span></span>
+      <button type="button" id="logoutBtn" style="border:1px solid var(--line);background:#fff;border-radius:6px;padding:3px 12px;font-size:12px;cursor:pointer;color:#5a6472">退出登录</button>
+    </div>
     <div style="font-size:12px;color:var(--muted);font-weight:600;margin:14px 2px 6px">🔤 翻译设置</div>
     <div style="background:#f6f8fb;border:1px solid var(--line);border-radius:12px;padding:2px 14px">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
@@ -175,6 +179,16 @@
     </div>
   </div>
 </div>
+<div id="loginOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3000;align-items:center;justify-content:center;">
+  <div style="width:min(340px,88vw);background:#fff;border-radius:14px;padding:20px;box-shadow:0 8px 32px rgba(15,23,42,.25)">
+    <div style="text-align:center;margin-bottom:14px"><span style="font-size:38px">🦜</span><div style="font-size:16px;font-weight:600;color:#1f2630;margin-top:4px">翻译鹦鹉 · 用户登录</div></div>
+    <input type="text" id="loginUser" placeholder="用户名" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #c4d0e8;border-radius:10px;font-size:15px;margin-bottom:10px;outline:none">
+    <input type="password" id="loginPass" placeholder="密码" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #c4d0e8;border-radius:10px;font-size:15px;margin-bottom:14px;outline:none">
+    <button type="button" id="loginBtn" style="width:100%;border:none;background:#e8590c;color:#fff;border-radius:10px;padding:11px 0;font-size:15px;font-weight:600;cursor:pointer">登 录</button>
+    <div id="loginMsg" style="font-size:12px;color:#b02a37;text-align:center;margin-top:8px;min-height:16px"></div>
+    <div style="text-align:center;margin-top:6px"><button type="button" id="loginSwitch" style="border:none;background:none;color:#7048a8;font-size:13px;cursor:pointer">没有账号？注册一个</button></div>
+  </div>
+</div>
 <div id="movieOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
   <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
@@ -253,7 +267,7 @@ function cacheLoad(q) {
 }
 
 function preloadHistoryCache() {
-  var u = 'api/history?limit=50&sort=time&token=' + encodeURIComponent(window.API_TOKEN || '');
+  var u = 'api/history?limit=50&sort=time&token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
   fetch(u, { credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
     .then(function (d) {
@@ -261,7 +275,7 @@ function preloadHistoryCache() {
       items.forEach(function (it) {
         var q = it.q;
         if (cacheLoad(q)) return;
-        var tu = 'api/translate?q=' + encodeURIComponent(q) + '&from=auto&to=&token=' + encodeURIComponent(window.API_TOKEN || '');
+        var tu = 'api/translate?q=' + encodeURIComponent(q) + '&from=auto&to=&token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
         fetch(tu, { credentials: 'same-origin' })
           .then(function (r2) { return r2.json(); })
           .then(function (d2) { if (d2.ok) cacheSave(q, d2); })
@@ -694,7 +708,7 @@ function newsShowDetail() {
   newsDetailView.style.display = 'flex';
 }
 function newsApi(path) {
-  return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(window.API_TOKEN || '');
+  return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
 }
 var NEWS_CATS = ['全部', '播客', '科技', '经济', '国际', '政治', '健康', '生活', '体育', '日常'];
 function newsRenderCats() {
@@ -1139,7 +1153,7 @@ function translate(){
     resultEl.innerHTML = '<div class="card"><div class="empty">翻译中…</div></div>';
   }
   var ft = fromTo();
-  fetch('api/translate?q=' + encodeURIComponent(q) + '&from=' + ft[0] + '&to=' + ft[1] + '&token=' + encodeURIComponent(window.API_TOKEN || ''))
+  fetch('api/translate?q=' + encodeURIComponent(q) + '&from=' + ft[0] + '&to=' + ft[1] + '&token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth())
     .then(function(r){ return r.json(); })
     .then(function(d){ if (d.ok) cacheSave(q, d); render(d); })
     .catch(function(){
@@ -1156,7 +1170,7 @@ imgInput.addEventListener('change', function(){
   resultEl.innerHTML = '<div class="card"><div class="empty">识别截图中…</div></div>';
   var fd = new FormData();
   fd.append('image', file);
-  var ocrUrl = 'api/ocr-translate?token=' + encodeURIComponent(window.API_TOKEN || '');
+  var ocrUrl = 'api/ocr-translate?token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
   fetch(ocrUrl, { method: 'POST', credentials: 'same-origin', body: fd })
     .then(function(r){ return r.json(); })
     .then(function(d){
@@ -1186,7 +1200,7 @@ function loadHistoryPage() {
   histSelEl = null;
   histSwipeOpen = null;
   historyList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
-  var u = 'api/history?limit=50&filter=' + encodeURIComponent(histFilter) + '&offset=' + histOffset + '&sort=' + histSort + '&token=' + encodeURIComponent(window.API_TOKEN || '');
+  var u = 'api/history?limit=50&filter=' + encodeURIComponent(histFilter) + '&offset=' + histOffset + '&sort=' + histSort + '&token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
   fetch(u)
     .then(function (r) { return r.json(); })
     .then(function (d) {
@@ -1391,7 +1405,7 @@ function resumeHistPlay() {
   }
 }
 function playRandomExample(word, done) {
-  var tu = 'api/translate?q=' + encodeURIComponent(word) + '&from=auto&to=&' + 'token=' + encodeURIComponent(window.API_TOKEN || '');
+  var tu = 'api/translate?q=' + encodeURIComponent(word) + '&from=auto&to=&' + 'token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
   fetch(tu).then(function (r) { return r.json(); }).then(function (d) {
     if (!histPlaying || histPaused) return;
     var pool = (d && d.ok && d.examples && d.examples.length) ? d.examples : [];
@@ -1500,7 +1514,7 @@ historyList.addEventListener('click', function (e) {
     var dq = delBtn.getAttribute('data-del');
     if (!confirm('删除「' + dq + '」？')) return;
     var fd = new FormData();
-    var delUrl = 'api/history/delete?token=' + encodeURIComponent(window.API_TOKEN || '');
+    var delUrl = 'api/history/delete?token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
     fetch(delUrl, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q: dq }) })
       .then(function (r) { return r.json(); })
       .then(function (d) { if (d.ok) loadHistoryPage(); else alert(d.error || '删除失败'); })
@@ -1587,6 +1601,61 @@ document.addEventListener('mouseup', function () {
   }
   histMouse.down = false; histMouse.row = null;
 });
+var trUserToken = localStorage.getItem('tr_userToken') || '';
+var trUsername = localStorage.getItem('tr_username') || '';
+var loginMode = 'login';
+function showLogin(msg) {
+  document.getElementById('loginOverlay').style.display = 'flex';
+  var m = document.getElementById('loginMsg');
+  if (m) m.textContent = msg || '';
+}
+function hideLogin() { document.getElementById('loginOverlay').style.display = 'none'; }
+function userAuth() { return trUserToken ? ('&ut=' + encodeURIComponent(trUserToken)) : ''; }
+function updateUserInfo() {
+  var el = document.getElementById('userName');
+  if (el) el.textContent = trUsername || '未登录';
+}
+(function () {
+  var btn = document.getElementById('loginBtn');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    var u = document.getElementById('loginUser').value.trim();
+    var p = document.getElementById('loginPass').value;
+    var msg = document.getElementById('loginMsg');
+    if (!u || !p) { msg.textContent = '请输入用户名和密码'; return; }
+    msg.textContent = '请稍候…';
+    fetch(newsApi(loginMode === 'login' ? 'api/user/login' : 'api/user/register'), {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || !d.ok) { msg.textContent = (d && d.error) || '失败'; return; }
+      trUserToken = d.token; trUsername = d.username;
+      localStorage.setItem('tr_userToken', trUserToken);
+      localStorage.setItem('tr_username', trUsername);
+      updateUserInfo();
+      hideLogin();
+      if (typeof historyOverlay !== 'undefined' && historyOverlay && historyOverlay.style.display !== 'none') loadHistoryPage();
+    }).catch(function () { msg.textContent = '网络错误'; });
+  });
+  document.getElementById('loginPass').addEventListener('keydown', function (e) { if (e.key === 'Enter') btn.click(); });
+  document.getElementById('loginSwitch').addEventListener('click', function () {
+    loginMode = loginMode === 'login' ? 'register' : 'login';
+    btn.textContent = loginMode === 'login' ? '登 录' : '注 册';
+    this.textContent = loginMode === 'login' ? '没有账号？注册一个' : '已有账号？去登录';
+  });
+  var lo = document.getElementById('logoutBtn');
+  if (lo) lo.addEventListener('click', function () {
+    localStorage.removeItem('tr_userToken');
+    localStorage.removeItem('tr_username');
+    trUserToken = ''; trUsername = '';
+    updateUserInfo();
+    sysOverlay.style.display = 'none';
+    showLogin('已退出，请重新登录');
+  });
+})();
+if (!trUserToken) showLogin();
+updateUserInfo();
 qEl.addEventListener('keydown', function(e){ if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) translate(); });
 </script>
 </body>

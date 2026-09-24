@@ -423,15 +423,100 @@ def extract_text_from_image(image_bytes: bytes) -> str:
 
 # ---------- 查询历史 ----------
 
-def _history_db() -> sqlite3.Connection:
+# ---------- 用户 ----------
+
+def _users_db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=15)
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS history (q TEXT PRIMARY KEY, created_at REAL, initial TEXT)"
+        "CREATE TABLE IF NOT EXISTS users ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, "
+        "pass_hash TEXT NOT NULL, token TEXT UNIQUE NOT NULL, "
+        "is_manager INTEGER DEFAULT 0, created_at REAL)"
     )
+    row = conn.execute("SELECT COUNT(*) FROM users WHERE is_manager=1").fetchone()
+    if not row or row[0] == 0:
+        import bcrypt
+        import secrets as _secrets
+        conn.execute(
+            "INSERT INTO users (username, pass_hash, token, is_manager, created_at) VALUES (?,?,?,?,?)",
+            ("以行践言", bcrypt.hashpw("Hello2010".encode(), bcrypt.gensalt()).decode(),
+             _secrets.token_hex(32), 1, time.time()),
+        )
+        conn.commit()
+    return conn
+
+
+def user_login(username: str, password: str):
+    import bcrypt
+    with _users_db() as conn:
+        row = conn.execute(
+            "SELECT id, username, pass_hash, token, is_manager FROM users WHERE username = ?",
+            (username.strip(),),
+        ).fetchone()
+    if not row:
+        return None
+    try:
+        if not bcrypt.checkpw(password.encode(), row[2].encode()):
+            return None
+    except Exception:
+        return None
+    return {"id": row[0], "username": row[1], "token": row[3], "is_manager": bool(row[4])}
+
+
+def user_register(username: str, password: str):
+    import bcrypt
+    import secrets as _secrets
+    username = username.strip()
+    if not username or len(password) < 4:
+        return None, "用户名或密码太短"
+    if len(username) > 30:
+        return None, "用户名过长"
+    with _users_db() as conn:
+        exists = conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone()
+        if exists:
+            return None, "用户名已存在"
+        token = _secrets.token_hex(32)
+        conn.execute(
+            "INSERT INTO users (username, pass_hash, token, is_manager, created_at) VALUES (?,?,?,?,?)",
+            (username, bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode(), token, 0, time.time()),
+        )
+    return {"username": username, "token": token, "is_manager": False}, None
+
+
+def user_by_token(token: str):
+    token = (token or "").strip()
+    if not token:
+        return None
+    with _users_db() as conn:
+        row = conn.execute(
+            "SELECT id, username, is_manager FROM users WHERE token = ?", (token,)
+        ).fetchone()
+    if not row:
+        return None
+    return {"id": row[0], "username": row[1], "is_manager": bool(row[2])}
+
+
+def _history_db() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, timeout=15)
     columns = [row[1] for row in conn.execute("PRAGMA table_info(history)")]
-    if "initial" not in columns:
-        conn.execute("ALTER TABLE history ADD COLUMN initial TEXT")
+    if columns and "user_id" not in columns:
+        conn.execute(
+            "CREATE TABLE history_new (user_id INTEGER NOT NULL DEFAULT 1, q TEXT NOT NULL, "
+            "created_at REAL, initial TEXT, PRIMARY KEY (user_id, q))"
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO history_new (user_id, q, created_at, initial) "
+            "SELECT 1, q, created_at, initial FROM history"
+        )
+        conn.execute("DROP TABLE history")
+        conn.execute("ALTER TABLE history_new RENAME TO history")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS history ("
+        "user_id INTEGER NOT NULL DEFAULT 1, q TEXT NOT NULL, created_at REAL, initial TEXT, "
+        "PRIMARY KEY (user_id, q))"
+    )
     conn.execute("UPDATE history SET initial = NULL WHERE initial IS NULL AND q IS NOT NULL")
     return conn
 
@@ -457,31 +542,50 @@ def _history_initial(q: str) -> str:
 HISTORY_MAX_ROWS = 50000
 
 
-def record_history(q: str) -> None:
+def record_history(q: str, user_token: str = "") -> None:
     q = q.strip()
     if not q or len(q) > 500:
         return
+    user = user_by_token(user_token)
+    if not user:
+        return
+    uid = user["id"]
     initial = _history_initial(q)
     with _history_db() as conn:
         updated = conn.execute(
-            "UPDATE history SET q = ?, created_at = ?, initial = ? WHERE lower(q) = lower(?)",
-            (q, time.time(), initial, q),
+            "UPDATE history SET q = ?, created_at = ?, initial = ? WHERE user_id = ? AND lower(q) = lower(?)",
+            (q, time.time(), initial, uid, q),
         ).rowcount
         if not updated:
             conn.execute(
-                "INSERT INTO history (q, created_at, initial) VALUES (?, ?, ?) "
-                "ON CONFLICT(q) DO UPDATE SET created_at = excluded.created_at, initial = excluded.initial",
-                (q, time.time(), initial),
+                "INSERT INTO history (user_id, q, created_at, initial) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(user_id, q) DO UPDATE SET created_at = excluded.created_at, initial = excluded.initial",
+                (uid, q, time.time(), initial),
             )
-        conn.execute("UPDATE history SET initial = ? WHERE initial IS NULL", (initial,))
         conn.execute(
-            "DELETE FROM history WHERE q IN ("
-            "SELECT q FROM history ORDER BY created_at DESC LIMIT -1 OFFSET ?)",
-            (HISTORY_MAX_ROWS,),
+            "DELETE FROM history WHERE user_id = ? AND q IN ("
+            "SELECT q FROM history WHERE user_id = ? ORDER BY created_at DESC LIMIT -1 OFFSET ?)",
+            (uid, uid, HISTORY_MAX_ROWS),
         )
 
 
-def load_history(limit: int = 50, offset: int = 0, sort: str = "time", filter_str: str = "") -> dict:
+def delete_history(user_token: str, q: str) -> int:
+    user = user_by_token(user_token)
+    if not user:
+        return 0
+    with _history_db() as conn:
+        n = conn.execute(
+            "DELETE FROM history WHERE user_id = ? AND lower(q) = lower(?)",
+            (user["id"], q),
+        ).rowcount
+    return n
+
+
+def load_history(user_token: str = "", limit: int = 50, offset: int = 0, sort: str = "time", filter_str: str = "") -> dict:
+    user = user_by_token(user_token)
+    if not user:
+        return {"total": 0, "items": []}
+    uid = user["id"]
     limit = max(1, min(int(limit), 50000))
     offset = max(0, int(offset))
     order_sql = (
@@ -492,17 +596,19 @@ def load_history(limit: int = 50, offset: int = 0, sort: str = "time", filter_st
         if filter_str:
             pattern = f"%{filter_str.lower()}%"
             total = conn.execute(
-                "SELECT COUNT(*) FROM history WHERE lower(q) LIKE ?", (pattern,)
+                "SELECT COUNT(*) FROM history WHERE user_id = ? AND lower(q) LIKE ?", (uid, pattern)
             ).fetchone()[0]
             rows = conn.execute(
-                f"SELECT q, created_at FROM history WHERE lower(q) LIKE ? ORDER BY {order_sql} LIMIT ? OFFSET ?",
-                (pattern, limit, offset),
+                f"SELECT q, created_at FROM history WHERE user_id = ? AND lower(q) LIKE ? ORDER BY {order_sql} LIMIT ? OFFSET ?",
+                (uid, pattern, limit, offset),
             ).fetchall()
         else:
-            total = conn.execute("SELECT COUNT(*) FROM history").fetchone()[0]
+            total = conn.execute(
+                "SELECT COUNT(*) FROM history WHERE user_id = ?", (uid,)
+            ).fetchone()[0]
             rows = conn.execute(
-                f"SELECT q, created_at FROM history ORDER BY {order_sql} LIMIT ? OFFSET ?",
-                (limit, offset),
+                f"SELECT q, created_at FROM history WHERE user_id = ? ORDER BY {order_sql} LIMIT ? OFFSET ?",
+                (uid, limit, offset),
             ).fetchall()
     items = [{"q": r[0], "created_at": r[1]} for r in rows]
     return {"total": total, "items": items}

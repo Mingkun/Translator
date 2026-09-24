@@ -40,16 +40,16 @@ def index():
     return html
 
 
-def _translate_with_cache(q: str, sl: str, tl: str) -> dict:
+def _translate_with_cache(q: str, sl: str, tl: str, ut: str = "") -> dict:
     """完整响应级缓存：查过的词直接秒回；大小写不敏感命中。"""
     cache_key = f"resp:{sl}:{tl}:{q.strip().lower()}"
     cached = engine.cache_get(cache_key)
     if isinstance(cached, dict) and cached.get("ok"):
-        engine.record_history(q)
+        engine.record_history(q, ut)
         return {**cached, "query": q}
     result = build_translation(q, sl, tl)
     engine.cache_set(cache_key, result)
-    engine.record_history(q)
+    engine.record_history(q, ut)
     return result
 
 
@@ -86,8 +86,9 @@ def api_translate():
         q = q[:500]
     sl = request.args.get("from") or "auto"
     tl = request.args.get("to") or ""
+    ut = request.args.get("ut") or ""
     try:
-        result = _translate_with_cache(q, sl, tl)
+        result = _translate_with_cache(q, sl, tl, ut)
         _save_movie_quotes(q, result)
         return jsonify(result)
     except Exception as exc:  # noqa: BLE001
@@ -181,11 +182,47 @@ def api_ocr_translate():
         from urllib.parse import quote as _quote
         extracted = engine.extract_text_from_image(data)
         q = extracted[:500]
-        result = _translate_with_cache(q, "auto", "")
+        result = _translate_with_cache(q, "auto", "", request.args.get("ut") or "")
         result["extracted"] = extracted
         return jsonify(result)
     except Exception as exc:  # noqa: BLE001
         return jsonify(ok=False, error=f"识别或翻译失败: {exc}"), 502
+
+
+@app.post("/api/user/login")
+def api_user_login():
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    payload = request.get_json(silent=True) or {}
+    username = str(payload.get("username") or "").strip()
+    password = str(payload.get("password") or "")
+    u = engine.user_login(username, password)
+    if not u:
+        return jsonify(ok=False, error="用户名或密码错误"), 401
+    return jsonify(ok=True, **u)
+
+
+@app.post("/api/user/register")
+def api_user_register():
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    payload = request.get_json(silent=True) or {}
+    username = str(payload.get("username") or "").strip()
+    password = str(payload.get("password") or "")
+    u, err = engine.user_register(username, password)
+    if not u:
+        return jsonify(ok=False, error=err or "注册失败"), 400
+    return jsonify(ok=True, **u)
+
+
+@app.get("/api/user/me")
+def api_user_me():
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    u = engine.user_by_token(request.args.get("ut") or "")
+    if not u:
+        return jsonify(ok=False, error="未登录"), 401
+    return jsonify(ok=True, **u)
 
 
 @app.get("/api/history")
@@ -206,7 +243,8 @@ def api_history():
     if sort not in {"time", "alpha"}:
         sort = "time"
     filter_str = request.args.get("filter", "")
-    return jsonify(ok=True, **engine.load_history(limit, offset, sort, filter_str))
+    ut = request.args.get("ut", "")
+    return jsonify(ok=True, **engine.load_history(ut, limit, offset, sort, filter_str))
 
 
 @app.post("/api/history/delete")
@@ -217,13 +255,8 @@ def api_history_delete():
     q = str(payload.get("q") or "").strip()
     if not q:
         return jsonify(ok=False, error="缺少词条"), 400
-    import sqlite3
-    conn = sqlite3.connect(engine.DB_PATH, timeout=15)
-    try:
-        n = conn.execute("DELETE FROM history WHERE lower(q) = lower(?)", (q,)).rowcount
-        conn.commit()
-    finally:
-        conn.close()
+    ut = str(payload.get("ut") or "")
+    n = engine.delete_history(ut, q)
     return jsonify(ok=True, deleted=n)
 
 
