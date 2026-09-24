@@ -983,6 +983,11 @@ newsDetailBody.addEventListener('touchend', function (e) {
       }
     }
   }
+  if (newsPlaying && !newsPaused) {
+    newsPaused = true;
+    if (newsAudio) { try { newsAudio.pause(); } catch (err) {} }
+    document.getElementById('newsPlay').textContent = '▶ 继续';
+  }
   newsFlipTo(target, seekT);
 }, { passive: true });
 newsDetailBody.addEventListener('contextmenu', function (e) { e.preventDefault(); });
