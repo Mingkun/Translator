@@ -346,6 +346,8 @@ def api_news():
         h = _news_hash(row["url"])
         audio = APP_ROOT / "data" / "news" / (h + ".mp3")
         audio_url = (row["audio_url"] or "").strip()
+        if audio.is_file():
+            audio_url = ""
         words = []
         meta = APP_ROOT / "data" / "news" / (h + ".json")
         if meta.is_file():

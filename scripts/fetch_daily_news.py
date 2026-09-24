@@ -122,13 +122,14 @@ def ensure_audio_url_col(conn):
 
 
 def transcribe_one(mp3_url, words_path, model):
-    """Download podcast audio, generate word timestamps via faster-whisper. Returns transcript text."""
-    import os
-    tmp = '/tmp/podcast_' + urlhash(mp3_url) + '.mp3'
-    req = urllib.request.Request(mp3_url, headers={'User-Agent': UA})
-    with urllib.request.urlopen(req, timeout=180) as r, open(tmp, 'wb') as f:
-        f.write(r.read())
-    segments, info = model.transcribe(tmp, word_timestamps=True, vad_filter=True)
+    """Download podcast audio (kept locally), generate word timestamps via faster-whisper. Returns transcript text."""
+    h = urlhash(mp3_url)
+    local = NEWS / (h + '.mp3')
+    if not (local.is_file() and local.stat().st_size > 10000):
+        req = urllib.request.Request(mp3_url, headers={'User-Agent': UA})
+        with urllib.request.urlopen(req, timeout=180) as r, open(local, 'wb') as f:
+            f.write(r.read())
+    segments, info = model.transcribe(str(local), word_timestamps=True, vad_filter=True)
     words, parts = [], []
     for seg in segments:
         for w in (seg.words or []):
@@ -137,10 +138,6 @@ def transcribe_one(mp3_url, words_path, model):
                 words.append({'t': round(float(w.start), 2), 'd': round(float(w.end - w.start), 2), 'w': ww})
         parts.append(seg.text.strip())
     Path(words_path).write_text(json.dumps(words), encoding='utf-8')
-    try:
-        os.remove(tmp)
-    except Exception:
-        pass
     return ' '.join(parts)
 
 
