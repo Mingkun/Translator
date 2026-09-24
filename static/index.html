@@ -841,7 +841,14 @@ newsDetailBody.addEventListener('touchend', function (e) {
   }
   newsFlipTo(target, seekT);
 }, { passive: true });
-var newsWordAudio = null, newsWordWasPlaying = false;
+var newsWordAudio = null, newsWordWasPlaying = false, newsLastWord = '';
+document.getElementById('newsWordCard').addEventListener('click', function (e) {
+  if (e.target && e.target.id === 'newsWordClose') return;
+  if (!newsLastWord) return;
+  try { if (newsWordAudio) { newsWordAudio.pause(); } } catch (err) {}
+  newsWordAudio = new Audio(newsApi('api/tts?text=' + encodeURIComponent(newsLastWord) + '&lang=en'));
+  newsWordAudio.play().catch(function () {});
+});
 function newsBindWordClose() {
   var cb = document.getElementById('newsWordClose');
   if (cb) cb.addEventListener('click', function (ev) {
@@ -853,6 +860,7 @@ function newsBindWordClose() {
 function newsLookupWord(span) {
   var word = (span.textContent || '').replace(/[^A-Za-z]/g, '');
   if (word.length < 2) return;
+  newsLastWord = word;
   newsWordWasPlaying = newsPlaying && !newsPaused;
   if (newsWordWasPlaying && newsAudio) { try { newsAudio.pause(); } catch (e) {} }
   var card = document.getElementById('newsWordCard');
