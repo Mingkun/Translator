@@ -1047,7 +1047,6 @@ function newsLookupPhrase(phrase) {
   clearWordRange();
   newsLastWord = phrase;
   newsCopyText(phrase);
-  newsToast('已复制词组');
   newsWordWasPlaying = newsPlaying && !newsPaused;
   if (newsWordWasPlaying && newsAudio) { try { newsAudio.pause(); } catch (e) {} }
   var card = document.getElementById('newsWordCard');
@@ -1075,7 +1074,6 @@ function newsLookupWord(span) {
   newsLastWord = word;
   clearWordRange();
   newsCopyText(word);
-  newsToast('已复制：' + word);
   newsWordWasPlaying = newsPlaying && !newsPaused;
   if (newsWordWasPlaying && newsAudio) { try { newsAudio.pause(); } catch (e) {} }
   var card = document.getElementById('newsWordCard');
