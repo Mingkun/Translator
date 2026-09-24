@@ -280,7 +280,7 @@ def api_history_delete():
     q = str(payload.get("q") or "").strip()
     if not q:
         return jsonify(ok=False, error="缺少词条"), 400
-    ut = str(payload.get("ut") or "")
+    ut = str(payload.get("ut") or request.args.get("ut") or "")
     n = engine.delete_history(ut, q)
     return jsonify(ok=True, deleted=n)
 
