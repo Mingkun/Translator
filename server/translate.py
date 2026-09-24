@@ -323,7 +323,7 @@ def dict_fast(q: str) -> dict:
         url = "https://dict.youdao.com/jsonapi?q=" + urllib.parse.quote(q)
         data = json.loads(_http_get(url, timeout=6).decode("utf-8", "ignore"))
         word_obj = ((data.get("ec") or {}).get("word") or [{}])[0]
-        ph = word_obj.get("usphone") or word_obj.get("ukphone") or ""
+        ph = word_obj.get("usphone") or ""
         defs = []
         for t in (word_obj.get("trs") or [])[:3]:
             tr = (t.get("tr") or [{}])[0]
