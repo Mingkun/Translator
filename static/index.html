@@ -1009,10 +1009,32 @@ function newsBindWordClose() {
     if (c) c.style.display = 'none';
   });
 }
+function newsCopyFallback(t) {
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = t;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  } catch (e) {}
+}
+function newsCopyText(t) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).catch(function () { newsCopyFallback(t); });
+      return;
+    }
+  } catch (e) {}
+  newsCopyFallback(t);
+}
 function newsLookupPhrase(phrase) {
   if (!phrase || phrase.length < 3) return;
   clearWordRange();
   newsLastWord = phrase;
+  newsCopyText(phrase);
+  setInfo('已复制词组');
   newsWordWasPlaying = newsPlaying && !newsPaused;
   if (newsWordWasPlaying && newsAudio) { try { newsAudio.pause(); } catch (e) {} }
   var card = document.getElementById('newsWordCard');
@@ -1039,6 +1061,8 @@ function newsLookupWord(span) {
   if (word.length < 2) return;
   newsLastWord = word;
   clearWordRange();
+  newsCopyText(word);
+  setInfo('已复制：' + word);
   newsWordWasPlaying = newsPlaying && !newsPaused;
   if (newsWordWasPlaying && newsAudio) { try { newsAudio.pause(); } catch (e) {} }
   var card = document.getElementById('newsWordCard');
