@@ -875,30 +875,52 @@ function clearWordRange() {
 }
 newsDetailBody.addEventListener('touchstart', function (e) {
   if (e.touches.length === 1) { newsTouchX = e.touches[0].clientX; newsTouchY = e.touches[0].clientY; }
-  if (e.touches.length !== 1) { newsDragSel.active = false; return; }
-  var w = e.target && e.target.closest ? e.target.closest('[data-nw]') : null;
-  newsDragSel.active = !!w;
+  if (newsDragSel.lpTimer) { clearTimeout(newsDragSel.lpTimer); newsDragSel.lpTimer = null; }
+  newsDragSel.active = false;
   newsDragSel.moved = false;
+  if (e.touches.length !== 1) return;
   newsDragSel.startX = e.touches[0].clientX;
   newsDragSel.startY = e.touches[0].clientY;
+  var w = e.target && e.target.closest ? e.target.closest('[data-nw]') : null;
   newsDragSel.startWord = w ? newsWords.indexOf(w) : -1;
   newsDragSel.lastWord = newsDragSel.startWord;
+  if (w && newsDragSel.startWord >= 0) {
+    var sw = newsDragSel.startWord;
+    newsDragSel.lpTimer = setTimeout(function () {
+      newsDragSel.lpTimer = null;
+      newsDragSel.active = true;
+      try { if (navigator.vibrate) navigator.vibrate(25); } catch (err) {}
+      paintWordRange(sw, sw);
+    }, 500);
+  }
 }, { passive: true });
 newsDetailBody.addEventListener('touchmove', function (e) {
-  if (!newsDragSel.active || e.touches.length !== 1 || newsDragSel.startWord < 0) return;
+  if (e.touches.length !== 1) return;
   var x = e.touches[0].clientX, y = e.touches[0].clientY;
-  if (!newsDragSel.moved && Math.abs(x - newsDragSel.startX) < 12 && Math.abs(y - newsDragSel.startY) < 12) return;
-  newsDragSel.moved = true;
-  var el = document.elementFromPoint(x, y);
-  var w = el && el.closest ? el.closest('[data-nw]') : null;
-  if (!w) return;
-  var idx = newsWords.indexOf(w);
-  if (idx < 0) return;
-  paintWordRange(newsDragSel.startWord, idx);
-  newsDragSel.lastWord = idx;
+  if (newsDragSel.active && newsDragSel.startWord >= 0) {
+    if (!newsDragSel.moved && Math.abs(x - newsDragSel.startX) < 12 && Math.abs(y - newsDragSel.startY) < 12) return;
+    newsDragSel.moved = true;
+    var el = document.elementFromPoint(x, y);
+    var w = el && el.closest ? el.closest('[data-nw]') : null;
+    if (!w) return;
+    var idx = newsWords.indexOf(w);
+    if (idx < 0) return;
+    paintWordRange(newsDragSel.startWord, idx);
+    newsDragSel.lastWord = idx;
+    return;
+  }
+  if (newsDragSel.lpTimer && (Math.abs(x - newsDragSel.startX) > 12 || Math.abs(y - newsDragSel.startY) > 12)) {
+    clearTimeout(newsDragSel.lpTimer);
+    newsDragSel.lpTimer = null;
+  }
 }, { passive: true });
 newsDetailBody.addEventListener('touchend', function (e) {
-  if (e.changedTouches.length !== 1) { newsDragSel.active = false; return; }
+  if (e.changedTouches.length !== 1) {
+    if (newsDragSel.lpTimer) { clearTimeout(newsDragSel.lpTimer); newsDragSel.lpTimer = null; }
+    newsDragSel.active = false;
+    return;
+  }
+  if (newsDragSel.lpTimer) { clearTimeout(newsDragSel.lpTimer); newsDragSel.lpTimer = null; }
   if (newsDragSel.active && newsDragSel.moved && newsDragSel.startWord >= 0) {
     newsSuppressClick = true;
     setTimeout(function () { newsSuppressClick = false; }, 400);
@@ -914,6 +936,9 @@ newsDetailBody.addEventListener('touchend', function (e) {
     }
     clearWordRange();
     return;
+  }
+  if (newsDragSel.active && !newsDragSel.moved) {
+    clearWordRange();
   }
   newsDragSel.active = false;
   var dx = e.changedTouches[0].clientX - newsTouchX;
