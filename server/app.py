@@ -234,10 +234,20 @@ def api_user_register():
 def api_user_me():
     if not _authorized():
         return jsonify(ok=False, error="unauthorized"), 401
-    u = engine.user_by_token(request.args.get("ut") or "")
+    u = engine.user_touch(request.args.get("ut") or "")
     if not u:
         return jsonify(ok=False, error="未登录"), 401
     return jsonify(ok=True, **u)
+
+
+@app.get("/api/user/list")
+def api_user_list():
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    u = engine.user_by_token(request.args.get("ut") or "")
+    if not u or not u.get("is_manager"):
+        return jsonify(ok=False, error="仅管理员可查看"), 403
+    return jsonify(ok=True, users=engine.users_list())
 
 
 @app.get("/api/history")

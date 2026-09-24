@@ -444,6 +444,15 @@ def _users_db() -> sqlite3.Connection:
              _secrets.token_hex(32), 1, time.time()),
         )
         conn.commit()
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(users)")]
+    for col, ddl in (
+        ("login_count", "INTEGER DEFAULT 0"),
+        ("usage_seconds", "REAL DEFAULT 0"),
+        ("last_seen", "REAL"),
+    ):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
+            conn.commit()
     return conn
 
 
@@ -461,7 +470,52 @@ def user_login(username: str, password: str):
             return None
     except Exception:
         return None
+    with _users_db() as conn:
+        conn.execute(
+            "UPDATE users SET login_count = COALESCE(login_count,0) + 1, last_seen = ? WHERE id = ?",
+            (time.time(), row[0]),
+        )
     return {"id": row[0], "username": row[1], "token": row[3], "is_manager": bool(row[4])}
+
+
+def user_touch(token: str):
+    """Heartbeat: accumulate usage time (capped per ping) and return the user."""
+    user = user_by_token(token)
+    if not user:
+        return None
+    now = time.time()
+    with _users_db() as conn:
+        row = conn.execute(
+            "SELECT last_seen FROM users WHERE id = ?", (user["id"],)
+        ).fetchone()
+        last = row[0] if row and row[0] else None
+        delta = 0.0
+        if last and 0 < (now - last) <= 600:
+            delta = now - last
+        conn.execute(
+            "UPDATE users SET usage_seconds = COALESCE(usage_seconds,0) + ?, last_seen = ? WHERE id = ?",
+            (delta, now, user["id"]),
+        )
+    return user
+
+
+def users_list() -> list:
+    with _users_db() as conn:
+        rows = conn.execute(
+            "SELECT username, is_manager, COALESCE(login_count,0), COALESCE(usage_seconds,0), created_at, last_seen "
+            "FROM users ORDER BY id"
+        ).fetchall()
+    out = []
+    for r in rows:
+        out.append({
+            "username": r[0],
+            "is_manager": bool(r[1]),
+            "login_count": r[2],
+            "usage_seconds": round(r[3]),
+            "created_at": r[4],
+            "last_seen": r[5],
+        })
+    return out
 
 
 def user_register(username: str, password: str):

@@ -105,6 +105,13 @@
       <span style="font-size:13px;color:var(--text)">👤 <span id="userName">…</span></span>
       <button type="button" id="logoutBtn" style="border:1px solid var(--line);background:#fff;border-radius:6px;padding:3px 12px;font-size:12px;cursor:pointer;color:#5a6472">退出登录</button>
     </div>
+    <div id="mgrGroup" style="display:none">
+      <div style="font-size:12px;color:var(--muted);font-weight:600;margin:14px 2px 6px">👥 用户管理</div>
+      <div style="background:#f6f8fb;border:1px solid #e3e8ef;border-radius:10px;padding:8px 12px">
+        <button type="button" id="mgrRefresh" style="border:none;background:#e8590c;color:#fff;border-radius:8px;padding:6px 16px;font-size:12px;cursor:pointer;margin-bottom:6px">刷新用户统计</button>
+        <div id="mgrUserList" style="font-size:12px"></div>
+      </div>
+    </div>
     <div style="font-size:12px;color:var(--muted);font-weight:600;margin:14px 2px 6px">🔤 翻译设置</div>
     <div style="background:#f6f8fb;border:1px solid var(--line);border-radius:12px;padding:2px 14px">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
@@ -1653,6 +1660,7 @@ function updateUserInfo() {
       trUserToken = d.token; trUsername = d.username;
       localStorage.setItem('tr_userToken', trUserToken);
       localStorage.setItem('tr_username', trUsername);
+      localStorage.setItem('tr_isManager', d.is_manager ? '1' : '0');
       updateUserInfo();
       hideLogin();
       if (typeof historyOverlay !== 'undefined' && historyOverlay && historyOverlay.style.display !== 'none') loadHistoryPage();
@@ -1668,6 +1676,7 @@ function updateUserInfo() {
   if (lo) lo.addEventListener('click', function () {
     localStorage.removeItem('tr_userToken');
     localStorage.removeItem('tr_username');
+    localStorage.removeItem('tr_isManager');
     trUserToken = ''; trUsername = '';
     updateUserInfo();
     sysOverlay.style.display = 'none';
@@ -1676,6 +1685,51 @@ function updateUserInfo() {
 })();
 if (!trUserToken) showLogin();
 updateUserInfo();
+var trIsManager = localStorage.getItem('tr_isManager') === '1';
+function fmtDur(sec) {
+  sec = Math.max(0, Math.round(sec));
+  var h = Math.floor(sec / 3600);
+  var m = Math.floor((sec % 3600) / 60);
+  return (h > 0 ? h + '小时' : '') + m + '分钟';
+}
+function updateMgrUI() {
+  var g = document.getElementById('mgrGroup');
+  if (g) g.style.display = trIsManager ? 'block' : 'none';
+}
+function refreshMe() {
+  if (!trUserToken) return;
+  fetch(newsApi('api/user/me')).then(function (r) { return r.json(); }).then(function (d) {
+    if (d && d.ok) {
+      trUsername = d.username;
+      trIsManager = !!d.is_manager;
+      localStorage.setItem('tr_username', trUsername);
+      localStorage.setItem('tr_isManager', trIsManager ? '1' : '0');
+      updateUserInfo();
+      updateMgrUI();
+    } else if (d && !d.ok) {
+      showLogin('登录已失效，请重新登录');
+    }
+  }).catch(function () {});
+}
+function loadUserStats() {
+  var box = document.getElementById('mgrUserList');
+  if (box) box.innerHTML = '<div style="font-size:12px;color:#5a6472;padding:4px 0">加载中…</div>';
+  fetch(newsApi('api/user/list')).then(function (r) { return r.json(); }).then(function (d) {
+    if (!box) return;
+    if (!d || !d.ok) { box.innerHTML = '<div style="font-size:12px;color:#b02a37">加载失败' + ((d && d.error) ? '：' + esc(String(d.error)) : '') + '</div>'; return; }
+    var html = '';
+    (d.users || []).forEach(function (u) {
+      html += '<div style="display:flex;justify-content:space-between;font-size:12px;color:#1f2630;padding:5px 0;border-bottom:1px dashed #e3e8ef">' +
+        '<span>' + esc(u.username) + (u.is_manager ? ' 👑' : '') + '</span>' +
+        '<span style="color:#5a6472">登录 ' + u.login_count + ' 次 · ' + fmtDur(u.usage_seconds) + '</span></div>';
+    });
+    box.innerHTML = html || '<div style="font-size:12px;color:#5a6472">暂无用户</div>';
+  }).catch(function () { if (box) box.innerHTML = '<div style="font-size:12px;color:#b02a37">网络错误</div>'; });
+}
+if (document.getElementById('mgrRefresh')) document.getElementById('mgrRefresh').addEventListener('click', loadUserStats);
+setInterval(function () { if (trUserToken) fetch(newsApi('api/user/me')).catch(function () {}); }, 60000);
+if (trUserToken) refreshMe();
+updateMgrUI();
 qEl.addEventListener('keydown', function(e){ if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) translate(); });
 </script>
 </body>
