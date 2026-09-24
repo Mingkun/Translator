@@ -1009,6 +1009,19 @@ function newsBindWordClose() {
     if (c) c.style.display = 'none';
   });
 }
+function newsToast(msg) {
+  var t = document.getElementById('newsToast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'newsToast';
+    t.style.cssText = 'position:fixed;left:50%;bottom:70px;transform:translateX(-50%);background:rgba(31,38,48,.85);color:#fff;font-size:12px;border-radius:16px;padding:6px 14px;z-index:5000;pointer-events:none;opacity:0;transition:opacity .3s';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  if (newsToast._tm) clearTimeout(newsToast._tm);
+  newsToast._tm = setTimeout(function () { t.style.opacity = '0'; }, 1500);
+}
 function newsCopyFallback(t) {
   try {
     var ta = document.createElement('textarea');
@@ -1034,7 +1047,7 @@ function newsLookupPhrase(phrase) {
   clearWordRange();
   newsLastWord = phrase;
   newsCopyText(phrase);
-  setInfo('已复制词组');
+  newsToast('已复制词组');
   newsWordWasPlaying = newsPlaying && !newsPaused;
   if (newsWordWasPlaying && newsAudio) { try { newsAudio.pause(); } catch (e) {} }
   var card = document.getElementById('newsWordCard');
@@ -1062,7 +1075,7 @@ function newsLookupWord(span) {
   newsLastWord = word;
   clearWordRange();
   newsCopyText(word);
-  setInfo('已复制：' + word);
+  newsToast('已复制：' + word);
   newsWordWasPlaying = newsPlaying && !newsPaused;
   if (newsWordWasPlaying && newsAudio) { try { newsAudio.pause(); } catch (e) {} }
   var card = document.getElementById('newsWordCard');
