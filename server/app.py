@@ -40,6 +40,21 @@ def index():
     return html
 
 
+def _serve_static_file(name: str, mime: str):
+    def _inner():
+        p = APP_ROOT / "static" / name
+        if not p.is_file():
+            abort(404)
+        return Response(p.read_bytes(), mimetype=mime)
+    return _inner
+
+
+app.add_url_rule("/manifest.json", "pwa_manifest", _serve_static_file("manifest.json", "application/manifest+json"))
+app.add_url_rule("/apple-touch-icon.png", "pwa_touch_icon", _serve_static_file("apple-touch-icon.png", "image/png"))
+app.add_url_rule("/icon-192.png", "pwa_icon192", _serve_static_file("icon-192.png", "image/png"))
+app.add_url_rule("/icon-512.png", "pwa_icon512", _serve_static_file("icon-512.png", "image/png"))
+
+
 def _translate_with_cache(q: str, sl: str, tl: str, ut: str = "") -> dict:
     """完整响应级缓存：查过的词直接秒回；大小写不敏感命中。"""
     cache_key = f"resp:{sl}:{tl}:{q.strip().lower()}"

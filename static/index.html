@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>🦜 翻译鹦鹉</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="翻译鹦鹉">
 <style>
   :root { --bg:#f7f9fc; --card:#ffffff; --text:#1f2630; --muted:#5a6472; --brand:#e8590c; --line:#dde4ec; }
   * { box-sizing: border-box; }
@@ -91,6 +96,10 @@
         <span style="font-size:22px">💻</span>
         <div><div>Windows 客户端</div><div style="font-size:11px;color:var(--muted)">ZIP 免安装绿色版</div></div>
       </a>
+      <button type="button" id="iosPwaBtn" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:14px;color:var(--text);background:#fff;cursor:pointer;width:100%;box-sizing:border-box">
+        <span style="font-size:22px">🍎</span>
+        <div style="text-align:left"><div>iPhone 使用</div><div style="font-size:11px;color:var(--muted)">Safari 添加到主屏幕</div></div>
+      </button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin:8px 2px 6px;">
       <span style="font-size:13px;color:var(--text)">👤 <span id="userName">…</span></span>
@@ -1105,6 +1114,9 @@ if (document.getElementById('trCheckUp')) document.getElementById('trCheckUp').a
     .catch(function () { info.textContent = '检查失败，请稍后重试'; });
 });
 trLoadVer();
+if (document.getElementById('iosPwaBtn')) document.getElementById('iosPwaBtn').addEventListener('click', function () {
+  alert('iPhone 使用方法：\n1. 用 Safari 打开 https://5130599.best/Translator/\n2. 点底部“分享”按钮（方框+向上箭头）\n3. 选“添加到主屏幕”\n即可像 App 一样全屏使用，带鹦鹉图标');
+});
 document.getElementById('sysClose').addEventListener('click', function () { sysOverlay.style.display = 'none'; });
 sysOverlay.addEventListener('click', function (e) { if (e.target === sysOverlay) sysOverlay.style.display = 'none'; });
 function render(d){
