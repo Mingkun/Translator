@@ -309,6 +309,43 @@ def deepseek_full(q: str) -> dict | None:
 _GOOGLE_RATE_LIMITED_UNTIL = 0.0
 
 
+def dict_fast(q: str) -> dict:
+    """快速词典通道：有道词典 API，音标+中文释义，毫秒级。"""
+    q = q.strip().lower()
+    if not q or len(q) > 60:
+        return {}
+    ck = f"dict:{q}"
+    cached = cache_get(ck)
+    if isinstance(cached, dict):
+        return cached
+    out = {}
+    try:
+        url = "https://dict.youdao.com/jsonapi?q=" + urllib.parse.quote(q)
+        data = json.loads(_http_get(url, timeout=6).decode("utf-8", "ignore"))
+        word_obj = ((data.get("ec") or {}).get("word") or [{}])[0]
+        ph = word_obj.get("usphone") or word_obj.get("ukphone") or ""
+        defs = []
+        for t in (word_obj.get("trs") or [])[:3]:
+            tr = (t.get("tr") or [{}])[0]
+            l = tr.get("l") or {}
+            i = l.get("i")
+            if isinstance(i, list):
+                parts = []
+                for x in i:
+                    if isinstance(x, dict):
+                        parts.append(str(x.get("i", "")))
+                    else:
+                        parts.append(str(x))
+                defs.append("".join(parts))
+            elif isinstance(i, str):
+                defs.append(i)
+        out = {"phonetic": ph, "defs": [d for d in defs if d][:3]}
+    except Exception:
+        out = {}
+    cache_set(ck, out)
+    return out
+
+
 def smart_translate(q: str, sl: str = "auto", tl: str = "") -> dict:
     """引擎链：deepseek → glm-5.3 → glm-5.1 → deepseek重试×2 → google → 报错。"""
     cache_key = f"smart5:{sl}:{tl}:{q.strip().lower()}"

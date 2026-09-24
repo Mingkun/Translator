@@ -285,6 +285,19 @@ def api_history_delete():
     return jsonify(ok=True, deleted=n)
 
 
+@app.get("/api/dict")
+def api_dict():
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    q = (request.args.get("q") or "").strip().lower()[:60]
+    if not q:
+        return jsonify(ok=False, error="empty"), 400
+    cached = engine.cache_get(f"resp:auto::{q}")
+    if isinstance(cached, dict) and cached.get("ok"):
+        return jsonify(ok=True, full=cached)
+    return jsonify(ok=True, fast=engine.dict_fast(q))
+
+
 @app.get("/api/quote")
 def api_quote():
     if not _authorized():
