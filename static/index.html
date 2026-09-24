@@ -294,7 +294,7 @@ function preloadHistoryCache() {
     .catch(function () {});
 }
 
-var quoteEnabled = localStorage.getItem('tr_quoteOn') !== 'false';
+var quoteEnabled = localStorage.getItem('tr_quoteOn') === 'true';
 var quoteCode = localStorage.getItem('tr_quoteCode') || 'HK02513';
 var quoteInterval = parseInt(localStorage.getItem('tr_quoteInterval') || '3', 10) || 3;
 var quoteTimer = null;
