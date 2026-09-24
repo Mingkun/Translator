@@ -972,23 +972,12 @@ newsDetailBody.addEventListener('touchend', function (e) {
   var target = newsPageCur + dir;
   var pages = newsDetailBody.querySelectorAll('.npage');
   if (target < 0 || target >= pages.length) return;
-  var seekT = null;
-  if (newsAudio && newsWT.length) {
-    var spans = pages[target].querySelectorAll('[data-nw]');
-    for (var i = 0; i < spans.length; i++) {
-      var idx = newsWords.indexOf(spans[i]);
-      if (idx >= 0 && newsWT[idx] !== null && newsWT[idx] !== undefined) {
-        seekT = Math.max(0, newsWT[idx] - 0.05);
-        break;
-      }
-    }
-  }
   if (newsPlaying && !newsPaused) {
     newsPaused = true;
     if (newsAudio) { try { newsAudio.pause(); } catch (err) {} }
     document.getElementById('newsPlay').textContent = '▶ 继续';
   }
-  newsFlipTo(target, seekT);
+  newsFlipTo(target, null);
 }, { passive: true });
 newsDetailBody.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 newsDetailBody.addEventListener('touchcancel', function () {
