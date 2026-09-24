@@ -812,8 +812,16 @@ document.getElementById('newsBtn').addEventListener('click', function () {
   newsOverlay.style.display = 'flex';
   newsLoadList();
 });
-document.getElementById('newsClose').addEventListener('click', function () { newsStopPlay(); newsOverlay.style.display = 'none'; });
-newsOverlay.addEventListener('click', function (e) { if (e.target === newsOverlay) { newsStopPlay(); newsOverlay.style.display = 'none'; } });
+document.getElementById('newsClose').addEventListener('click', function () {
+  if (newsDetailView.style.display !== 'none') { newsShowList(); return; }
+  newsStopPlay(); newsOverlay.style.display = 'none';
+});
+newsOverlay.addEventListener('click', function (e) {
+  if (e.target === newsOverlay) {
+    if (newsDetailView.style.display !== 'none') { newsShowList(); return; }
+    newsStopPlay(); newsOverlay.style.display = 'none';
+  }
+});
 document.getElementById('newsBack').addEventListener('click', function () { newsShowList(); });
 var newsTapCount = 0, newsTapTimer = null;
 newsDetailBody.addEventListener('click', function (e) {
