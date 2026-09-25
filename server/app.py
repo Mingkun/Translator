@@ -294,7 +294,7 @@ def api_dict():
         return jsonify(ok=False, error="empty"), 400
     cached = engine.cache_get(f"resp:auto::{q}")
     if isinstance(cached, dict) and cached.get("ok"):
-        return jsonify(ok=True, full=cached)
+        return jsonify(ok=True, full=cached, fast=engine.dict_fast(q))
     return jsonify(ok=True, fast=engine.dict_fast(q))
 
 
