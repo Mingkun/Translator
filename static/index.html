@@ -1254,8 +1254,8 @@ sysOverlay.addEventListener('click', function (e) { if (e.target === sysOverlay)
 function render(d){
   if(!d.ok){ resultEl.innerHTML='<div class="card"><div class="err">'+esc(d.error||'翻译失败')+'</div></div>'; return; }
   var html = '<div class="card">';
-  html += '<div class="trans-main">' + esc(d.translation) + '</div>';
-  if (d.term) html += '<div class="phonetic-row"><span>' + esc(d.term) + (d.phonetic ? ' /' + esc(d.phonetic) + '/' : '') + '</span></div>';
+  html += '<div class="trans-main">' + twWrap(d.translation) + '</div>';
+  if (d.term) html += '<div class="phonetic-row"><span>' + twWrap(d.term) + (d.phonetic ? ' /' + esc(d.phonetic) + '/' : '') + '</span></div>';
   var btns = [];
   btns.push('<span style="font-size:12px">英文</span>' + audioBtn(d.audio_en || ''));
   if (d.audio_zh) btns.push('<span style="font-size:12px">中文</span>' + audioBtn(d.audio_zh));
@@ -1263,7 +1263,7 @@ function render(d){
   if (d.meanings && d.meanings.length) {
     html += '<div class="sec-title">常用含义</div>';
     d.meanings.forEach(function(m){
-      html += '<div class="meaning">' + (m.pos?'<span class="pos">'+esc(m.pos)+'</span>':'') + esc(m.definition) + (m.zh?'<div style="color:var(--brand);font-size:13px;margin-top:2px">'+esc(m.zh)+'</div>':'') + (m.example?'<div style="color:var(--muted);font-size:13px;margin-top:2px">例：'+esc(m.example)+'</div>':'') + '</div>';
+      html += '<div class="meaning">' + (m.pos?'<span class="pos">'+esc(m.pos)+'</span>':'') + twWrap(m.definition) + (m.zh?'<div style="color:var(--brand);font-size:13px;margin-top:2px">'+esc(m.zh)+'</div>':'') + (m.example?'<div style="color:var(--muted);font-size:13px;margin-top:2px">例：'+twWrap(m.example)+'</div>':'') + '</div>';
     });
   }
   if (d.examples && d.examples.length) {
@@ -1275,7 +1275,7 @@ function render(d){
   if (d.movie_examples && d.movie_examples.length) {
     html += '<div class="sec-title">影视例句</div>';
     d.movie_examples.forEach(function(ex){
-      html += '<div class="example">' + audioBtn(ex.audio) + '<div class="txt">' + esc(ex.en) + '<span class="movie-tag">' + esc(ex.source) + '</span></div></div>';
+      html += '<div class="example">' + audioBtn(ex.audio) + '<div class="txt">' + twWrap(ex.en) + '<span class="movie-tag">' + esc(ex.source) + '</span></div></div>';
     });
   }
   html += '</div>';
