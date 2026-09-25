@@ -64,7 +64,6 @@
   #interpBtn { transition: box-shadow .15s ease, background .15s ease, border-color .15s ease; }
   #interpBtn svg, #interpBtn span { display: inline-block; transition: transform .12s ease; }
   #interpBtn:active svg, #interpBtn:active span, #interpBtn.rec-on svg, #interpBtn.rec-on span { transform: translateY(2px) scale(.88); }
-  #interpBtn.rec-on { box-shadow: inset 0 3px 6px rgba(15,23,42,.3); border-color: #b6c2d4; }
   #interpRecBtn { transition: transform .12s ease, box-shadow .12s ease; }
   #interpRecBtn:active { transform: translateY(3px) scale(.96); box-shadow: 0 2px 8px rgba(232,89,12,.3); }
 </style>
@@ -88,7 +87,7 @@
 
   <div class="input-card">
     <div style="display:flex;gap:8px;align-items:stretch">
-      <button type="button" id="interpBtn" title="口译" style="width:48px;flex-shrink:0;border:1.5px solid #c4d0e8;border-radius:10px;background:#f0f4fa;font-size:13px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3z"/><path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.08A7 7 0 0 0 19 11z"/></svg></button>
+      <button type="button" id="interpBtn" title="口译" style="width:48px;flex-shrink:0;border:none;background:none;font-size:13px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;padding:0"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3z"/><path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.08A7 7 0 0 0 19 11z"/></svg></button>
       <textarea id="q" placeholder="输入中文或英文…" autocomplete="off" style="flex:1;width:auto"></textarea>
       <button type="button" class="go" id="go" style="width:56px;margin-top:0;font-size:13px;padding:8px 0">翻译</button>
     </div>
