@@ -1347,6 +1347,7 @@ function loadHistoryPage() {
       } else {
         historyList.innerHTML = items.map(function (it) {
           return '<div data-q="' + esc(it.q) + '" data-swipe="1" style="position:relative;overflow:hidden;border-bottom:1px dashed #dde4ec;user-select:none;-webkit-user-select:none">' +
+            '<button type="button" data-enter="' + esc(it.q) + '" style="position:absolute;left:0;top:0;bottom:0;width:56px;border:none;background:#2f9e44;color:#fff;font-size:13px;cursor:pointer">进入</button>' +
             '<button type="button" data-del="' + esc(it.q) + '" style="position:absolute;right:0;top:0;bottom:0;width:56px;border:none;background:#e03131;color:#fff;font-size:13px;cursor:pointer">删除</button>' +
             '<div class="swipe-c" style="position:relative;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 8px;background:#fff;transition:transform .15s ease;cursor:pointer">' +
             '<span style="font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(it.q) + '</span>' +
@@ -1706,6 +1707,13 @@ document.getElementById('histNext').addEventListener('click', function () { if (
 document.getElementById('historyClose').addEventListener('click', function () { stopHistPlay(); historyOverlay.style.display = 'none'; });
 historyOverlay.addEventListener('click', function (e) { if (e.target === historyOverlay) { stopHistPlay(); historyOverlay.style.display = 'none'; } });
 historyList.addEventListener('click', function (e) {
+  var enterBtn = e.target && e.target.closest ? e.target.closest('[data-enter]') : null;
+  if (enterBtn) {
+    var erow = enterBtn.closest('[data-swipe]');
+    histSwipeClose();
+    if (erow) histEnterTranslate(erow);
+    return;
+  }
   var delBtn = e.target.closest('[data-del]');
   if (delBtn) {
     var dq = delBtn.getAttribute('data-del');
@@ -1762,13 +1770,14 @@ historyList.addEventListener('touchmove', function (e) {
   var dx = t.clientX - histSwipe.sx;
   var dy = t.clientY - histSwipe.sy;
   if (!histSwipe.active && Math.abs(dy) > Math.abs(dx)) { histSwipe.row = null; return; }
-  if (dx < 0) { histSwipe.active = true; histSwipe.dx = Math.max(dx, -64); histSwipeDo(histSwipe.row, histSwipe.dx); }
+  if (dx !== 0) { histSwipe.active = true; histSwipe.dx = Math.max(-64, Math.min(64, dx)); histSwipeDo(histSwipe.row, histSwipe.dx); }
 }, { passive: true });
 historyList.addEventListener('touchend', function () {
   if (!histSwipe.row) return;
   if (histSwipe.active) {
     histDragged = true;
     if (histSwipe.dx < -32) { histSwipeDo(histSwipe.row, -56); histSwipeOpen = histSwipe.row; }
+    else if (histSwipe.dx > 32) { var er = histSwipe.row; histSwipe.row = null; histEnterTranslate(er); return; }
     else { histSwipeDo(histSwipe.row, 0); }
   }
   histSwipe.row = null;
@@ -1786,7 +1795,7 @@ document.addEventListener('mousemove', function (e) {
   var dx = e.clientX - histMouse.sx;
   var dy = e.clientY - histMouse.sy;
   if (!histMouse.active) { if (Math.abs(dx) < 8 || Math.abs(dy) > Math.abs(dx)) return; }
-  if (dx < 0) { histMouse.active = true; histMouse.dx = Math.max(dx, -64); histSwipeDo(histMouse.row, histMouse.dx); }
+  if (dx !== 0) { histMouse.active = true; histMouse.dx = Math.max(-64, Math.min(64, dx)); histSwipeDo(histMouse.row, histMouse.dx); }
   else if (histMouse.active) { histMouse.dx = 0; histSwipeDo(histMouse.row, 0); }
 });
 document.addEventListener('mouseup', function () {
@@ -1794,6 +1803,7 @@ document.addEventListener('mouseup', function () {
   if (histMouse.active) {
     histDragged = true;
     if (histMouse.dx < -32) { histSwipeDo(histMouse.row, -56); histSwipeOpen = histMouse.row; }
+    else if (histMouse.dx > 32) { var er2 = histMouse.row; histMouse.down = false; histMouse.row = null; histEnterTranslate(er2); return; }
     else { histSwipeDo(histMouse.row, 0); }
   }
   histMouse.down = false; histMouse.row = null;
