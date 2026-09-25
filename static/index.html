@@ -186,7 +186,7 @@
 </div>
   
 <div id="newsOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2100;align-items:center;justify-content:center;">
-  <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;transform:translateY(-6px);">
+  <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
       <strong style="font-size:15px">📰 每日新闻</strong>
       <button type="button" id="newsClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
@@ -218,7 +218,7 @@
   </div>
 </div>
 <div id="movieOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
-  <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;transform:translateY(-6px);">
+  <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
       <strong style="font-size:15px">🎬</strong>
       <div style="display:flex;gap:6px;align-items:center;">
@@ -231,7 +231,7 @@
   </div>
 </div>
 <div id="historyOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
-    <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;transform:translateY(-6px);">
+    <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
         <strong style="font-size:15px">🕘</strong>
         <button type="button" id="histSort" style="border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;color:#5a6472">排序：时间</button>
@@ -530,7 +530,7 @@ function mvNext() {
   mvAudio.play().catch(function () { if (mvPlaying && !mvPaused) mvTimer = setTimeout(mvNext, 600); });
 }
 document.getElementById('movieBtn').addEventListener('click', function () {
-  movieOverlay.style.display = 'flex';
+  movieOverlay.style.display = 'flex'; fitOverlays();
   mvLoad();
 });
 document.getElementById('movieClose').addEventListener('click', function () { mvStopPlay(); movieOverlay.style.display = 'none'; });
@@ -861,7 +861,7 @@ function newsLoadDetail(id) {
     .catch(function () { newsDetailBody.innerHTML = '<div style="color:#b02a37;font-size:13px;text-align:center;padding:16px">加载失败</div>'; });
 }
 document.getElementById('newsBtn').addEventListener('click', function () {
-  newsOverlay.style.display = 'flex';
+  newsOverlay.style.display = 'flex'; fitOverlays();
   newsLoadList();
 });
 document.getElementById('newsClose').addEventListener('click', function () {
@@ -1391,6 +1391,23 @@ imgInput.addEventListener('change', function(){
   imgInput.value = '';
 });
 var historyOverlay = document.getElementById('historyOverlay');
+function fitOverlays() {
+  var sys = document.getElementById('sysBtn');
+  var nb = document.getElementById('newsBtn');
+  if (!sys || !nb) return;
+  var padTop = Math.max(0, sys.getBoundingClientRect().bottom);
+  var padBottom = Math.max(0, window.innerHeight - nb.getBoundingClientRect().top);
+  [newsOverlay, movieOverlay, historyOverlay].forEach(function (ov) {
+    if (!ov) return;
+    ov.style.boxSizing = 'border-box';
+    ov.style.paddingTop = padTop + 'px';
+    ov.style.paddingBottom = padBottom + 'px';
+    var card = ov.firstElementChild;
+    if (card) card.style.maxHeight = Math.max(200, window.innerHeight - padTop - padBottom) + 'px';
+  });
+}
+window.addEventListener('resize', fitOverlays);
+fitOverlays();
 var historyList = document.getElementById('historyList');
 var histOffset = 0;
 var histSort = "time";
@@ -1453,7 +1470,7 @@ function loadHistoryPage() {
 }
 document.getElementById('historyBtn').addEventListener('click', function () {
   histOffset = 0;
-  historyOverlay.style.display = 'flex';
+  historyOverlay.style.display = 'flex'; fitOverlays();
   loadHistoryPage();
 });
 
@@ -1605,7 +1622,7 @@ resultEl.addEventListener('touchend', function (e) {
     if (dx < 0) {
       var q = (qEl.value || '').trim();
       histOffset = 0;
-      historyOverlay.style.display = 'flex';
+      historyOverlay.style.display = 'flex'; fitOverlays();
       loadHistoryPage();
       if (q) {
         setTimeout(function () {
