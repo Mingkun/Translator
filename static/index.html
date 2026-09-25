@@ -1405,6 +1405,8 @@ function histBadgeSet(q, n) {
   if (b) b.textContent = n > 0 ? ('+' + n) : '';
 }
 function histStopSelAudio() {
+  histCancelTimer();
+  if (histPlayAudio) { try { histPlayAudio.pause(); } catch (e) {} }
   if (histSolo.timer) { clearTimeout(histSolo.timer); histSolo.timer = null; }
   if (histSolo.audio) { try { histSolo.audio.pause(); } catch (e) {} }
   var bq = histSolo.q;
@@ -1431,7 +1433,10 @@ function histSoloNext() {
   var adv = function () {
     if (!histSolo.playing) return;
     histSolo.played++;
-    if (histSolo.played >= histSolo.count) { histStopSelAudio(); return; }
+    if (histSolo.played >= histSolo.count) {
+      playRandomExample(q, function () { if (histSolo.playing) histStopSelAudio(); }, true);
+      return;
+    }
     histSolo.timer = setTimeout(function () { histSoloNext(); }, 1000);
   };
   a.onended = adv;
@@ -1504,6 +1509,7 @@ function histShowWordCard(q) {
 }
 function histSelectPlay(item, count) {
   histStopSelAudio();
+  hideExampleBar();
   histSetSelected(item);
   histShowWordCard(item.getAttribute('data-q') || '');
   histSolo = { q: item.getAttribute('data-q') || '', count: count, played: 0, audio: null, timer: null, playing: true };
@@ -1600,10 +1606,10 @@ function resumeHistPlay() {
     startCurrentWord();
   }
 }
-function playRandomExample(word, done) {
+function playRandomExample(word, done, force) {
   var tu = 'api/translate?q=' + encodeURIComponent(word) + '&from=auto&to=&' + 'token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
   fetch(tu).then(function (r) { return r.json(); }).then(function (d) {
-    if (!histPlaying || histPaused) return;
+    if (!force && (!histPlaying || histPaused)) return;
     var pool = (d && d.ok && d.examples && d.examples.length) ? d.examples : [];
     if (!pool.length) { histSchedule(done, 2000); return; }
     var pick = pool[Math.floor(Math.random() * pool.length)];
@@ -1611,9 +1617,9 @@ function playRandomExample(word, done) {
     showExampleBar(word, pick);
     function chainReplay() {
       histSchedule(function () {
-        if (!histPlaying || histPaused) return;
+        if (!force && (!histPlaying || histPaused)) return;
         histPlaySound(exUrl, function () {
-          if (!histPlaying || histPaused) return;
+          if (!force && (!histPlaying || histPaused)) return;
           histReplayCount -= 1;
           setReplayBadge(histReplayCount);
           if (histReplayCount > 0) { chainReplay(); return; }
@@ -1622,14 +1628,14 @@ function playRandomExample(word, done) {
       }, 1000);
     }
     histSchedule(function () {
-      if (!histPlaying || histPaused) return;
+      if (!force && (!histPlaying || histPaused)) return;
       histPlaySound(exUrl, function () {
-        if (!histPlaying || histPaused) return;
+        if (!force && (!histPlaying || histPaused)) return;
         if (histReplayCount > 0) { chainReplay(); return; }
         histSchedule(done, 2000);
       });
     }, 2000);
-  }).catch(function () { if (histPlaying && !histPaused) histSchedule(done, 2000); });
+  }).catch(function () { if (force || (histPlaying && !histPaused)) histSchedule(done, 2000); });
 }
 function histNext() {
   if (!histPlaying) { stopHistPlay(); return; }
