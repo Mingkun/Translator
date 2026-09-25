@@ -60,6 +60,7 @@
     100% { transform: scale(1); opacity: 1; }
   }
   .err { color:#b02a37; font-size:14px; text-align:center; padding:16px 0; }
+  @keyframes interpSpin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -101,17 +102,18 @@
     </div>
     <div id="interpBody" style="overflow:auto;flex:1;text-align:center">
       <div id="interpHint" style="color:#5a6472;font-size:13px;padding:6px 0 12px">点 🎤 开始说话，再点一下结束并翻译</div>
-      <button type="button" id="interpRecBtn" style="width:96px;height:96px;border-radius:50%;border:none;background:#e8590c;color:#fff;font-size:38px;cursor:pointer;box-shadow:0 6px 18px rgba(232,89,12,.35)">🎤</button>
+      <button type="button" id="interpRecBtn" style="width:96px;height:96px;border-radius:50%;border:none;background:#e8590c;color:#fff;font-size:38px;cursor:pointer;box-shadow:0 6px 18px rgba(232,89,12,.35)"><svg viewBox="0 0 24 24" width="44" height="44" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3z"/><path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.08A7 7 0 0 0 19 11z"/></svg></button>
       <div id="interpTimer" style="display:none;margin-top:10px;font-size:20px;font-weight:600;color:#b02a37;font-variant-numeric:tabular-nums">0:00</div>
       <div id="interpStatus" style="display:none;color:#5a6472;font-size:13px;padding:10px 0"></div>
+      <div id="interpSpin" style="display:none;margin:14px auto;width:28px;height:28px;border:3px solid #e3e8f0;border-top-color:#e8590c;border-radius:50%;animation:interpSpin .8s linear infinite"></div>
       <div id="interpResult" style="display:none;text-align:left">
-        <div style="font-size:11px;color:#5a6472;margin:10px 0 4px">🗣 原文</div>
+        <div style="font-size:11px;color:#5a6472;margin:10px 0 4px">🎙 原话</div>
         <div id="interpSrc" style="font-size:15px;line-height:1.7;background:#f0f4fa;border-radius:10px;padding:10px 12px;white-space:pre-wrap"></div>
-        <div style="font-size:11px;color:#5a6472;margin:12px 0 4px">🔁 地道译文（口语习惯表达）</div>
+        <div style="font-size:11px;color:#5a6472;margin:12px 0 4px">💬 地道译文</div>
         <div id="interpDst" style="font-size:16px;line-height:1.8;background:#fff3d6;border-radius:10px;padding:10px 12px;white-space:pre-wrap"></div>
         <div style="display:flex;gap:8px;margin-top:12px;justify-content:center">
-          <button type="button" id="interpPlay" style="border:1px solid #c7d0dc;background:#fff;border-radius:8px;padding:6px 16px;font-size:13px;cursor:pointer">🔊 播放译文</button>
-          <button type="button" id="interpAgain" style="border:1px solid #c7d0dc;background:#fff;border-radius:8px;padding:6px 16px;font-size:13px;cursor:pointer">🎤 再来一段</button>
+          <button type="button" id="interpPlay" style="border:1px solid #c7d0dc;background:#fff;border-radius:8px;padding:6px 16px;font-size:13px;cursor:pointer">🔊 听译文</button>
+          <button type="button" id="interpAgain" style="border:1px solid #c7d0dc;background:#fff;border-radius:8px;padding:6px 16px;font-size:13px;cursor:pointer">🎤 再录一段</button>
         </div>
       </div>
     </div>
@@ -1243,6 +1245,7 @@ var lastAutoPlayUrl = null;
 var sysOverlay = document.getElementById('sysOverlay');
 var interpOverlay = document.getElementById('interpOverlay');
 var INTERP_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3z"/><path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.08A7 7 0 0 0 19 11z"/></svg>';
+var INTERP_BIG_ICON = '<svg viewBox="0 0 24 24" width="44" height="44" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3z"/><path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.08A7 7 0 0 0 19 11z"/></svg>';
 var interpStream = null, interpRec = null, interpChunks = [], interpRecording = false, interpTimerInt = null, interpSecs = 0, interpAudio = null, interpSending = false;
 function interpShow(el, on) { var e = document.getElementById(el); if (e) e.style.display = on ? '' : 'none'; }
 function interpSetHint(t) { document.getElementById('interpHint').textContent = t; }
@@ -1255,7 +1258,8 @@ function interpReset() {
   if (interpAudio) { try { interpAudio.pause(); } catch (e) {} interpAudio = null; }
   interpChunks = []; interpSecs = 0;
   var rb = document.getElementById('interpRecBtn');
-  rb.style.background = '#e8590c'; rb.textContent = '🎤';
+  rb.style.background = '#e8590c'; rb.innerHTML = INTERP_BIG_ICON;
+  interpShow('interpSpin', false); interpShow('interpRecBtn', true);
   interpShow('interpTimer', false); interpShow('interpResult', false); interpSetStatus('');
   var mb = document.getElementById('interpBtn');
   mb.style.background = ''; mb.style.color = ''; mb.innerHTML = INTERP_ICON;
@@ -1303,16 +1307,18 @@ function interpStopRec() {
   try { interpRec.stop(); } catch (e) {}
   if (interpStream) { interpStream.getTracks().forEach(function (t) { t.stop(); }); interpStream = null; }
   var rb = document.getElementById('interpRecBtn');
-  rb.style.background = '#e8590c'; rb.textContent = '🎤';
+  rb.style.background = '#e8590c'; rb.innerHTML = INTERP_BIG_ICON;
   interpShow('interpTimer', false);
   var mb = document.getElementById('interpBtn');
   mb.style.background = ''; mb.style.color = ''; mb.innerHTML = INTERP_ICON;
   interpOverlay.style.display = 'flex'; fitOverlays();
   interpShow('interpResult', false);
-  interpSetStatus('🎙 识别中…');
+  interpShow('interpRecBtn', false);
+  interpShow('interpSpin', true);
+  interpSetStatus('正在识别…');
 }
 document.getElementById('interpRecBtn').addEventListener('click', function () { if (interpRecording) { interpStopRec(); } else { interpStartRec(); } });
-function interpErr(msg) { interpSending = false; interpSetStatus(''); interpSetHint(msg || '出错了，请重试'); }
+function interpErr(msg) { interpSending = false; interpShow('interpSpin', false); interpShow('interpRecBtn', true); interpSetStatus(''); interpSetHint(msg || '出错了，请重试'); }
 function interpSend() {
   var blob = new Blob(interpChunks, { type: (interpRec && interpRec.mimeType) || 'audio/webm' });
   interpChunks = [];
@@ -1321,7 +1327,8 @@ function interpSend() {
   fd.append('audio', blob, 'speech.webm');
   var url = 'api/interpret?token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
   interpSending = true;
-  interpSetStatus('🎙 识别中…');
+  interpShow('interpSpin', true);
+  interpSetStatus('正在识别…');
   fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
     .then(function (d) {
@@ -1331,7 +1338,8 @@ function interpSend() {
       document.getElementById('interpDst').textContent = d.translation || '';
       interpShow('interpResult', true);
       interpSending = false;
-      interpSetHint('完成 ✅');
+      interpShow('interpSpin', false);
+      interpSetHint('✅ 翻译完成');
       if (d.translation) interpPlayText(d.translation);
     })
     .catch(function () { interpErr('网络错误，请重试'); });
