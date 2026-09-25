@@ -55,7 +55,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="logo">🦜</div>
+    <div class="logo" id="logoBtn" style="cursor:pointer">🦜</div>
     <div>
       <div style="display:flex;align-items:center;gap:8px">
         <h1 style="margin:0">翻译鹦鹉</h1>
@@ -1305,6 +1305,13 @@ function translate(){
     });
 }
 document.getElementById('go').addEventListener('click', translate);
+if (document.getElementById('logoBtn')) document.getElementById('logoBtn').addEventListener('click', function () {
+  qEl.value = '';
+  resultEl.innerHTML = '';
+  try { if (trWordAudio) { trWordAudio.pause(); } } catch (e) {}
+  var c = document.getElementById('trWordCard');
+  if (c) c.style.display = 'none';
+});
 preloadHistoryCache();
 var imgInput = document.getElementById('imgInput');
 document.getElementById('ocrBtn').addEventListener('click', function(){ imgInput.click(); });
