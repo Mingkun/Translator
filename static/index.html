@@ -1265,7 +1265,7 @@ function updateLoopUI() {
 }
 updateLoopUI();
 updatePlayModeUI();
-document.getElementById('sysBtn').addEventListener('click', function () { sysOverlay.style.display = 'flex'; });
+document.getElementById('sysBtn').addEventListener('click', function () { sysOverlay.style.display = 'flex'; fitOverlays(); });
 function trLoadVer() {
   fetch('downloads/translator-version.json?t=' + Date.now())
     .then(function (r) { return r.json(); })
@@ -1397,7 +1397,7 @@ function fitOverlays() {
   if (!sys || !nb) return;
   var padTop = Math.max(0, sys.getBoundingClientRect().bottom);
   var padBottom = Math.max(0, window.innerHeight - nb.getBoundingClientRect().top);
-  [newsOverlay, movieOverlay, historyOverlay].forEach(function (ov) {
+  [newsOverlay, movieOverlay, historyOverlay, sysOverlay].forEach(function (ov) {
     if (!ov) return;
     ov.style.boxSizing = 'border-box';
     ov.style.paddingTop = padTop + 'px';
