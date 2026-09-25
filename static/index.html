@@ -231,6 +231,7 @@
       <input type="text" id="histSearch" placeholder="🔍 输入关键词过滤…" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1.5px solid #c4d0e8;border-radius:10px;font-size:14px;margin-bottom:6px;background:#f0f4fa;outline:none" autocomplete="off">
       <div id="historyList" style="overflow:auto;flex:1"></div>
       <div id="playExampleBar" style="display:none;margin:6px 0 4px;background:#f6f8fb;border:1px solid #dde4ec;border-radius:10px;padding:10px 12px;box-sizing:border-box"></div>
+      <div id="histWordCard" style="display:none;margin:6px 0 4px;background:#f6f8fb;border:1px solid #dde4ec;border-radius:10px;padding:10px 12px;position:relative"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px">
         <button type="button" id="histPrev" style="border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:4px 14px;font-size:12px;cursor:pointer">上一页</button>
         <span id="histPage" style="font-size:12px;color:#5a6472">1 / 1</span>
@@ -1331,6 +1332,8 @@ function loadHistoryPage() {
   histStopSelAudio();
   histSelEl = null;
   histSwipeOpen = null;
+  var hwc = document.getElementById('histWordCard');
+  if (hwc) hwc.style.display = 'none';
   historyList.innerHTML = '<div style="color:#5a6472;font-size:13px;text-align:center;padding:16px">加载中…</div>';
   var u = 'api/history?limit=50&filter=' + encodeURIComponent(histFilter) + '&offset=' + histOffset + '&sort=' + histSort + '&token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
   fetch(u)
@@ -1439,9 +1442,52 @@ function histSetSelected(item) {
   var els = historyList.querySelectorAll('[data-q]');
   for (var i = 0; i < els.length; i++) els[i].style.borderLeft = els[i] === item ? '3px solid #e8590c' : '';
 }
+function histBindCardClose() {
+  var cb = document.getElementById('histWordClose');
+  if (cb) cb.addEventListener('click', function (ev) {
+    ev.stopPropagation();
+    var c = document.getElementById('histWordCard');
+    if (c) c.style.display = 'none';
+  });
+}
+function histShowWordCard(q) {
+  var card = document.getElementById('histWordCard');
+  if (!card || !q) return;
+  card.style.display = 'block';
+  card.innerHTML = '<div style="font-size:16px;font-weight:600;color:#1f2630">' + esc(q) + '</div><div style="font-size:12px;color:#5a6472;margin-top:4px">查询中…</div><button type="button" id="histWordClose" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;cursor:pointer;color:#5a6472;line-height:1">×</button>';
+  histBindCardClose();
+  fetch(newsApi('api/dict?q=' + encodeURIComponent(q)))
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (d && d.ok && d.full) {
+        var ph = d.full.phonetic ? ' /' + esc(d.full.phonetic) + '/' : '';
+        var tr = d.full.translation ? esc(d.full.translation) : '';
+        card.innerHTML = '<div style="font-size:16px;font-weight:600;color:#1f2630">' + esc(q) + ph + '</div><div style="font-size:13px;color:#1f2630;margin-top:4px;line-height:1.6">' + tr + '</div><button type="button" id="histWordClose" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;cursor:pointer;color:#5a6472;line-height:1">×</button>';
+        histBindCardClose();
+        return;
+      }
+      if (d && d.ok && d.fast && ((d.fast.defs || []).length || d.fast.phonetic)) {
+        var ph2 = d.fast.phonetic ? ' /' + esc(d.fast.phonetic) + '/' : '';
+        var defs = (d.fast.defs || []).map(function (x) { return '<div style="font-size:12px;color:#1f2630;margin-top:2px;line-height:1.5">• ' + esc(x) + '</div>'; }).join('');
+        card.innerHTML = '<div style="font-size:16px;font-weight:600;color:#1f2630">' + esc(q) + ph2 + '</div>' + defs + '<button type="button" id="histWordClose" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;cursor:pointer;color:#5a6472;line-height:1">×</button>';
+        histBindCardClose();
+        return;
+      }
+      fetch(newsApi('api/translate?q=' + encodeURIComponent(q) + '&from=auto&to='))
+        .then(function (r) { return r.json(); })
+        .then(function (d2) {
+          var tr2 = (d2 && d2.translation) ? esc(d2.translation) : '暂无释义';
+          card.innerHTML = '<div style="font-size:16px;font-weight:600;color:#1f2630">' + esc(q) + '</div><div style="font-size:13px;color:#1f2630;margin-top:4px;line-height:1.6">' + tr2 + '</div><button type="button" id="histWordClose" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;cursor:pointer;color:#5a6472;line-height:1">×</button>';
+          histBindCardClose();
+        })
+        .catch(function () { card.innerHTML = '<div style="font-size:14px;color:#b02a37">查询失败</div>'; });
+    })
+    .catch(function () { card.innerHTML = '<div style="font-size:14px;color:#b02a37">查询失败</div>'; });
+}
 function histSelectPlay(item, count) {
   histStopSelAudio();
   histSetSelected(item);
+  histShowWordCard(item.getAttribute('data-q') || '');
   histSolo = { q: item.getAttribute('data-q') || '', count: count, played: 0, audio: null, timer: null, playing: true };
   histSoloNext();
 }
