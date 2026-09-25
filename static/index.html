@@ -519,6 +519,36 @@ document.getElementById('movieBtn').addEventListener('click', function () {
   movieOverlay.style.display = 'flex';
   mvLoad();
 });
+var mvTouchX = 0, mvTouchY = 0;
+movieList.addEventListener('touchstart', function (e) {
+  if (e.touches.length === 1) { mvTouchX = e.touches[0].clientX; mvTouchY = e.touches[0].clientY; }
+}, { passive: true });
+movieList.addEventListener('touchend', function (e) {
+  if (e.changedTouches.length !== 1) return;
+  var dx = e.changedTouches[0].clientX - mvTouchX;
+  var dy = e.changedTouches[0].clientY - mvTouchY;
+  if (dx > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    mvStopPlay();
+    movieOverlay.style.display = 'none';
+    qEl.value = '';
+    resultEl.innerHTML = '';
+  }
+}, { passive: true });
+var newsListTouchX = 0, newsListTouchY = 0;
+newsListBody.addEventListener('touchstart', function (e) {
+  if (e.touches.length === 1) { newsListTouchX = e.touches[0].clientX; newsListTouchY = e.touches[0].clientY; }
+}, { passive: true });
+newsListBody.addEventListener('touchend', function (e) {
+  if (e.changedTouches.length !== 1) return;
+  var dx = e.changedTouches[0].clientX - newsListTouchX;
+  var dy = e.changedTouches[0].clientY - newsListTouchY;
+  if (dx > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    newsStopPlay();
+    newsOverlay.style.display = 'none';
+    qEl.value = '';
+    resultEl.innerHTML = '';
+  }
+}, { passive: true });
 document.getElementById('movieClose').addEventListener('click', function () { mvStopPlay(); movieOverlay.style.display = 'none'; });
 movieOverlay.addEventListener('click', function (e) { if (e.target === movieOverlay) { mvStopPlay(); movieOverlay.style.display = 'none'; } });
 document.getElementById('mvPlay').addEventListener('click', function () {
@@ -987,7 +1017,17 @@ newsDetailBody.addEventListener('touchend', function (e) {
   var dir = dx < 0 ? 1 : -1;
   var target = newsPageCur + dir;
   var pages = newsDetailBody.querySelectorAll('.npage');
-  if (target < 0 || target >= pages.length) return;
+  if (target < 0) {
+    newsStopPlay();
+    newsOverlay.style.display = 'none';
+    qEl.value = '';
+    resultEl.innerHTML = '';
+    try { if (trWordAudio) { trWordAudio.pause(); } } catch (e2) {}
+    var cw = document.getElementById('trWordCard');
+    if (cw) cw.style.display = 'none';
+    return;
+  }
+  if (target >= pages.length) return;
   if (newsPlaying && !newsPaused) {
     newsPaused = true;
     if (newsAudio) { try { newsAudio.pause(); } catch (err) {} }
