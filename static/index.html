@@ -549,7 +549,9 @@ function newsHi(k) {
   if (k === newsCurIdx) return;
   if (k < 0 || k >= newsWords.length) { newsCurIdx = -1; return; }
   var from = (newsCurIdx >= 0 && k > newsCurIdx) ? newsCurIdx + 1 : 0;
-  for (var i = from; i <= k; i++) newsWords[i].style.background = '#fff3d6';
+  for (var i = from; i <= k; i++) {
+    if (newsWT[i] !== null && newsWT[i] !== undefined) newsWords[i].style.background = '#fff3d6';
+  }
   ensureNewsPage(newsWords[k]);
   newsCurIdx = k;
 }
