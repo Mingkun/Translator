@@ -1921,7 +1921,6 @@ historyList.addEventListener('click', function (e) {
   var delBtn = e.target.closest('[data-del]');
   if (delBtn) {
     var dq = delBtn.getAttribute('data-del');
-    if (!confirm('删除「' + dq + '」？')) return;
     var fd = new FormData();
     var delUrl = 'api/history/delete?token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
     fetch(delUrl, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q: dq }) })
