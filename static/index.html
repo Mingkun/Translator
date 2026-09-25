@@ -100,7 +100,7 @@
       <button type="button" id="interpClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
     </div>
     <div id="interpBody" style="overflow:auto;flex:1;text-align:center">
-      <div id="interpHint" style="color:#5a6472;font-size:13px;padding:6px 0 12px">点击麦克风开始说话，再点一下结束并翻译</div>
+      <div id="interpHint" style="color:#5a6472;font-size:13px;padding:6px 0 12px">点 🎤 开始说话，再点一下结束并翻译</div>
       <button type="button" id="interpRecBtn" style="width:96px;height:96px;border-radius:50%;border:none;background:#e8590c;color:#fff;font-size:38px;cursor:pointer;box-shadow:0 6px 18px rgba(232,89,12,.35)">🎤</button>
       <div id="interpTimer" style="display:none;margin-top:10px;font-size:20px;font-weight:600;color:#b02a37;font-variant-numeric:tabular-nums">0:00</div>
       <div id="interpStatus" style="display:none;color:#5a6472;font-size:13px;padding:10px 0"></div>
@@ -1242,7 +1242,7 @@ document.getElementById('newsStop').addEventListener('click', newsStopPlay);
 var lastAutoPlayUrl = null;
 var sysOverlay = document.getElementById('sysOverlay');
 var interpOverlay = document.getElementById('interpOverlay');
-var interpStream = null, interpRec = null, interpChunks = [], interpRecording = false, interpTimerInt = null, interpSecs = 0, interpAudio = null;
+var interpStream = null, interpRec = null, interpChunks = [], interpRecording = false, interpTimerInt = null, interpSecs = 0, interpAudio = null, interpSending = false;
 function interpShow(el, on) { var e = document.getElementById(el); if (e) e.style.display = on ? '' : 'none'; }
 function interpSetHint(t) { document.getElementById('interpHint').textContent = t; }
 function interpSetStatus(t) { var e = document.getElementById('interpStatus'); if (t) { e.style.display = ''; e.textContent = t; } else { e.style.display = 'none'; } }
@@ -1256,33 +1256,44 @@ function interpReset() {
   var rb = document.getElementById('interpRecBtn');
   rb.style.background = '#e8590c'; rb.textContent = '🎤';
   interpShow('interpTimer', false); interpShow('interpResult', false); interpSetStatus('');
-  interpSetHint('点击麦克风开始说话，再点一下结束并翻译');
+  var mb = document.getElementById('interpBtn');
+  mb.style.background = ''; mb.style.color = ''; mb.textContent = '🎤';
+  interpSetHint('点 🎤 开始说话，再点一下结束并翻译');
 }
-document.getElementById('interpBtn').addEventListener('click', function () { interpOverlay.style.display = 'flex'; fitOverlays(); interpReset(); });
+document.getElementById('interpBtn').addEventListener('click', function () {
+  if (interpRecording) { interpStopRec(); return; }
+  if (interpSending) return;
+  interpStartRec();
+});
 document.getElementById('interpClose').addEventListener('click', function () { interpReset(); interpOverlay.style.display = 'none'; });
 interpOverlay.addEventListener('click', function (e) { if (e.target === interpOverlay) { interpReset(); interpOverlay.style.display = 'none'; } });
 function interpTick() {
   interpSecs++;
   var m = Math.floor(interpSecs / 60), s2 = interpSecs % 60;
-  document.getElementById('interpTimer').textContent = m + ':' + (s2 < 10 ? '0' : '') + s2;
+  var tt = m + ':' + (s2 < 10 ? '0' : '') + s2;
+  document.getElementById('interpTimer').textContent = tt;
+  document.getElementById('interpBtn').textContent = tt;
   if (interpSecs >= 120) interpStopRec();
 }
 function interpStartRec() {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') { interpSetHint('此浏览器不支持录音'); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') { interpOpenHint('此浏览器不支持录音'); return; }
   navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
     interpStream = stream; interpChunks = [];
-    try { interpRec = new MediaRecorder(stream); } catch (e) { interpSetHint('录音初始化失败'); return; }
+    try { interpRec = new MediaRecorder(stream); } catch (e) { interpOpenHint('录音初始化失败'); return; }
     interpRec.ondataavailable = function (e) { if (e.data && e.data.size) interpChunks.push(e.data); };
     interpRec.onstop = interpSend;
     interpRec.start();
     interpRecording = true; interpSecs = 0;
+    interpOverlay.style.display = 'none';
     interpShow('interpResult', false); interpSetStatus('');
-    interpShow('interpTimer', true);
-    var rb = document.getElementById('interpRecBtn');
-    rb.style.background = '#b02a37'; rb.textContent = '⏹';
-    interpSetHint('正在录音…点击停止并翻译');
+    var mb = document.getElementById('interpBtn');
+    mb.style.background = '#b02a37'; mb.style.color = '#fff'; mb.textContent = '0:00';
     interpTimerInt = setInterval(interpTick, 1000);
-  }).catch(function () { interpSetHint('无法访问麦克风，请检查权限'); });
+  }).catch(function () { interpOpenHint('无法访问麦克风，请在弹窗中允许麦克风权限后重试'); });
+}
+function interpOpenHint(msg) {
+  interpOverlay.style.display = 'flex'; fitOverlays(); interpReset();
+  interpSetHint(msg);
 }
 function interpStopRec() {
   if (!interpRecording) return;
@@ -1293,10 +1304,14 @@ function interpStopRec() {
   var rb = document.getElementById('interpRecBtn');
   rb.style.background = '#e8590c'; rb.textContent = '🎤';
   interpShow('interpTimer', false);
+  var mb = document.getElementById('interpBtn');
+  mb.style.background = ''; mb.style.color = ''; mb.textContent = '🎤';
+  interpOverlay.style.display = 'flex'; fitOverlays();
+  interpShow('interpResult', false);
   interpSetStatus('🎙 识别中…');
 }
 document.getElementById('interpRecBtn').addEventListener('click', function () { if (interpRecording) { interpStopRec(); } else { interpStartRec(); } });
-function interpErr(msg) { interpSetStatus(''); interpSetHint(msg || '出错了，请重试'); }
+function interpErr(msg) { interpSending = false; interpSetStatus(''); interpSetHint(msg || '出错了，请重试'); }
 function interpSend() {
   var blob = new Blob(interpChunks, { type: (interpRec && interpRec.mimeType) || 'audio/webm' });
   interpChunks = [];
@@ -1304,6 +1319,7 @@ function interpSend() {
   var fd = new FormData();
   fd.append('audio', blob, 'speech.webm');
   var url = 'api/interpret?token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
+  interpSending = true;
   interpSetStatus('🎙 识别中…');
   fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
@@ -1313,6 +1329,7 @@ function interpSend() {
       document.getElementById('interpSrc').textContent = d.transcript || '';
       document.getElementById('interpDst').textContent = d.translation || '';
       interpShow('interpResult', true);
+      interpSending = false;
       interpSetHint('完成 ✅');
       if (d.translation) interpPlayText(d.translation);
     })
@@ -1328,7 +1345,7 @@ document.getElementById('interpPlay').addEventListener('click', function () {
   var t = document.getElementById('interpDst').textContent.trim();
   if (t) interpPlayText(t);
 });
-document.getElementById('interpAgain').addEventListener('click', function () { interpReset(); });
+document.getElementById('interpAgain').addEventListener('click', function () { interpReset(); interpStartRec(); });
 
 var playbackMode = localStorage.getItem('tr_playbackMode') || 'both';
 var playbackCount = parseInt(localStorage.getItem('tr_playbackCount') || '20', 10) || 20;
