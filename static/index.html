@@ -61,6 +61,12 @@
   }
   .err { color:#b02a37; font-size:14px; text-align:center; padding:16px 0; }
   @keyframes interpSpin { to { transform: rotate(360deg); } }
+  #interpBtn { transition: box-shadow .15s ease, background .15s ease, border-color .15s ease; }
+  #interpBtn svg, #interpBtn span { display: inline-block; transition: transform .12s ease; }
+  #interpBtn:active svg, #interpBtn:active span, #interpBtn.rec-on svg, #interpBtn.rec-on span { transform: translateY(2px) scale(.88); }
+  #interpBtn.rec-on { box-shadow: inset 0 3px 6px rgba(15,23,42,.3); background: #e8edf5; border-color: #b6c2d4; color: #3d4757; }
+  #interpRecBtn { transition: transform .12s ease, box-shadow .12s ease; }
+  #interpRecBtn:active { transform: translateY(3px) scale(.96); box-shadow: 0 2px 8px rgba(232,89,12,.3); }
 </style>
 </head>
 <body>
@@ -1261,7 +1267,7 @@ function interpReset() {
   interpShow('interpSpin', false); interpShow('interpRecBtn', true);
   interpShow('interpTimer', false); interpShow('interpResult', false); interpSetStatus('');
   var mb = document.getElementById('interpBtn');
-  mb.style.background = ''; mb.style.color = ''; mb.innerHTML = INTERP_ICON;
+  mb.classList.remove('rec-on'); mb.innerHTML = INTERP_ICON;
   interpSetHint('');
 }
 document.getElementById('interpBtn').addEventListener('click', function () {
@@ -1276,7 +1282,8 @@ function interpTick() {
   var m = Math.floor(interpSecs / 60), s2 = interpSecs % 60;
   var tt = m + ':' + (s2 < 10 ? '0' : '') + s2;
   document.getElementById('interpTimer').textContent = tt;
-  document.getElementById('interpBtn').textContent = tt;
+  var sp = document.getElementById('interpBtn').querySelector('span');
+  if (sp) sp.textContent = tt;
   if (interpSecs >= 120) interpStopRec();
 }
 function interpStartRec() {
@@ -1291,7 +1298,8 @@ function interpStartRec() {
     interpOverlay.style.display = 'none';
     interpShow('interpResult', false); interpSetStatus('');
     var mb = document.getElementById('interpBtn');
-    mb.style.background = '#b02a37'; mb.style.color = '#fff'; mb.textContent = '0:00';
+    mb.classList.add('rec-on');
+    mb.innerHTML = '<span>0:00</span>';
     interpTimerInt = setInterval(interpTick, 1000);
   }).catch(function (err) { interpOpenHint('无法访问麦克风（' + ((err && err.name) || '未知错误') + '），请在系统设置中允许麦克风权限后重试'); });
 }
@@ -1309,7 +1317,7 @@ function interpStopRec() {
   rb.style.background = '#e8590c'; rb.innerHTML = INTERP_BIG_ICON;
   interpShow('interpTimer', false);
   var mb = document.getElementById('interpBtn');
-  mb.style.background = ''; mb.style.color = ''; mb.innerHTML = INTERP_ICON;
+  mb.classList.remove('rec-on'); mb.innerHTML = INTERP_ICON;
   interpOverlay.style.display = 'flex'; fitOverlays();
   interpShow('interpResult', false);
   interpShow('interpRecBtn', false);
