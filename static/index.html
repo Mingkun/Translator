@@ -1515,7 +1515,39 @@ function trShowWordCard(word) {
 document.getElementById('trWordCard').addEventListener('click', function () {
   if (trWordLast) trPlayWordAudio(trWordLast);
 });
+var trSwiped = false, trTouchX = 0, trTouchY = 0;
+resultEl.addEventListener('touchstart', function (e) {
+  if (e.touches.length === 1) { trTouchX = e.touches[0].clientX; trTouchY = e.touches[0].clientY; trSwiped = false; }
+}, { passive: true });
+resultEl.addEventListener('touchend', function (e) {
+  if (e.changedTouches.length !== 1) return;
+  var dx = e.changedTouches[0].clientX - trTouchX;
+  var dy = e.changedTouches[0].clientY - trTouchY;
+  if (dx < -60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    trSwiped = true;
+    setTimeout(function () { trSwiped = false; }, 400);
+    var q = (qEl.value || '').trim();
+    histOffset = 0;
+    historyOverlay.style.display = 'flex';
+    loadHistoryPage();
+    if (q) {
+      setTimeout(function () {
+        var els = historyList.querySelectorAll('[data-q]');
+        var hit = null;
+        for (var i = 0; i < els.length; i++) {
+          if ((els[i].getAttribute('data-q') || '').toLowerCase() === q.toLowerCase()) { hit = els[i]; break; }
+        }
+        if (hit) {
+          var face = histFace(hit);
+          if (face) face.style.background = '#fff3d6';
+          try { hit.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (err) {}
+        }
+      }, 600);
+    }
+  }
+}, { passive: true });
 resultEl.addEventListener('click', function (e) {
+  if (trSwiped) return;
   var w = e.target && e.target.closest ? e.target.closest('[data-tw]') : null;
   if (w) trShowWordCard(w.textContent || '');
 });
