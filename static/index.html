@@ -17,6 +17,16 @@
   .wrap { max-width: 720px; margin: 0 auto; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
   header { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
   header .logo { font-size:30px; }
+  @keyframes parrotWiggle {
+    0% { transform: rotate(0deg) scale(1); }
+    20% { transform: rotate(-12deg) scale(1.15); }
+    40% { transform: rotate(10deg) scale(1.1); }
+    60% { transform: rotate(-6deg) scale(1.05); }
+    80% { transform: rotate(3deg) scale(1); }
+    100% { transform: rotate(0deg) scale(1); }
+  }
+  .parrot-wiggle { animation: parrotWiggle .6s ease; }
+  header .logo { -webkit-tap-highlight-color: transparent; tap-highlight-color: transparent; }
   header h1 { font-size:16px; margin:0; }
   header .sub { font-size:12px; color:var(--muted); }
   .input-card { background:#fff; border:2px solid #c4d0e8; border-radius:14px; padding:14px; box-shadow:0 4px 16px rgba(15,23,42,.10); }
@@ -1306,6 +1316,11 @@ function translate(){
 }
 document.getElementById('go').addEventListener('click', translate);
 if (document.getElementById('logoBtn')) document.getElementById('logoBtn').addEventListener('click', function () {
+  var el = this;
+  el.classList.remove('parrot-wiggle');
+  void el.offsetWidth;
+  el.classList.add('parrot-wiggle');
+  try { var sq = new Audio('parrot_squawk.mp3'); sq.play().catch(function(){}); } catch (e) {}
   qEl.value = '';
   resultEl.innerHTML = '';
   try { if (trWordAudio) { trWordAudio.pause(); } } catch (e) {}

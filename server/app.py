@@ -53,6 +53,7 @@ app.add_url_rule("/manifest.json", "pwa_manifest", _serve_static_file("manifest.
 app.add_url_rule("/apple-touch-icon.png", "pwa_touch_icon", _serve_static_file("apple-touch-icon.png", "image/png"))
 app.add_url_rule("/icon-192.png", "pwa_icon192", _serve_static_file("icon-192.png", "image/png"))
 app.add_url_rule("/icon-512.png", "pwa_icon512", _serve_static_file("icon-512.png", "image/png"))
+app.add_url_rule("/parrot_squawk.mp3", "parrot_squawk", _serve_static_file("parrot_squawk.mp3", "audio/mpeg"))
 
 
 def _translate_with_cache(q: str, sl: str, tl: str, ut: str = "") -> dict:
