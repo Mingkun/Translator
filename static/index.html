@@ -1093,7 +1093,7 @@ function newsLookupWord(span) {
       if (d.fast && ((d.fast.defs || []).length || d.fast.phonetic)) {
         fastShown = true;
         var ph2 = d.fast.phonetic ? ' /' + esc(d.fast.phonetic) + '/' : '';
-        var defs2 = (d.fast.defs || []).map(function (x) { return '<div style="font-size:13px;color:#1f2630;margin-top:2px;line-height:1.5">' + newsFmtDefInner(x) + '</div>'; }).join('');
+        var defs2 = (d.fast.defs || []).slice(0, 1).map(function (x) { return '<div style="font-size:13px;color:#1f2630;margin-top:2px;line-height:1.5">' + newsFmtDefInner(x) + '</div>'; }).join('');
         card.innerHTML = '<div style="font-size:16px;font-weight:600;color:#1f2630">' + esc(word) + ph2 + '</div>' + defs2 + '<button type="button" id="newsWordClose" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;cursor:pointer;color:#5a6472;line-height:1">×</button>';
         newsBindWordClose();
       }
@@ -1500,7 +1500,7 @@ function trShowWordCard(word) {
       if (d.full && d.full.translation) {
         body += '<div style="font-size:13px;color:#1f2630;margin-top:4px;line-height:1.6">' + esc(d.full.translation) + '</div>';
       }
-      var defs = ((d.fast && d.fast.defs) || []);
+      var defs = ((d.fast && d.fast.defs) || []).slice(0, 1);
       body += defs.map(function (x) { return '<div style="font-size:13px;color:#1f2630;margin-top:2px;line-height:1.5">' + newsFmtDefInner(x) + '</div>'; }).join('');
       if (!body) body = '<div style="font-size:13px;color:#5a6472;margin-top:4px">暂无释义</div>';
       card.innerHTML = head + body + '<button type="button" id="trWordClose" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;cursor:pointer;color:#5a6472;line-height:1">×</button>';
@@ -1518,7 +1518,7 @@ resultEl.addEventListener('click', function (e) {
 function newsMeaningsHtml(d) {
   var means = (d && d.meanings) || [];
   var out = '';
-  for (var i = 0; i < means.length && i < 3; i++) {
+  for (var i = 0; i < means.length && i < 1; i++) {
     var m = means[i];
     var pos = m.pos ? '<span style="display:inline-block;font-size:11px;color:#7048a8;background:#f3e8ff;border-radius:4px;padding:0 5px;margin-right:4px">' + esc(m.pos) + '</span>' : '';
     var txt = (m.zh ? esc(m.zh) : (m.definition ? esc(m.definition) : ''));
@@ -1563,7 +1563,7 @@ function histShowWordCard(q) {
       if (d && d.ok && d.fast && ((d.fast.defs || []).length || d.fast.phonetic)) {
         fastShown = true;
         var ph2 = d.fast.phonetic ? ' /' + esc(d.fast.phonetic) + '/' : '';
-        var defs = (d.fast.defs || []).map(function (x) { return '<div style="font-size:13px;color:#1f2630;margin-top:2px;line-height:1.5">' + newsFmtDefInner(x) + '</div>'; }).join('');
+        var defs = (d.fast.defs || []).slice(0, 1).map(function (x) { return '<div style="font-size:13px;color:#1f2630;margin-top:2px;line-height:1.5">' + newsFmtDefInner(x) + '</div>'; }).join('');
         card.innerHTML = '<div style="font-size:15px;font-weight:600;color:#1f2630">' + esc(q) + ph2 + '</div>' + defs + '';
         histBindCardClose();
         return;
