@@ -1017,8 +1017,7 @@ newsDetailBody.addEventListener('touchend', function (e) {
   var pages = newsDetailBody.querySelectorAll('.npage');
   if (target < 0) {
     newsStopPlay();
-    newsOverlay.style.display = 'none';
-    trClearToBlank();
+    newsShowList();
     return;
   }
   if (target >= pages.length) return;
