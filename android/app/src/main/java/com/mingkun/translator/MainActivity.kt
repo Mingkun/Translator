@@ -7,10 +7,13 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.PermissionRequest
+import android.content.pm.PackageManager
 
 class MainActivity : Activity() {
     private lateinit var web: WebView
     private var filePathCallback: android.webkit.ValueCallback<Array<android.net.Uri>>? = null
+    private var pendingPermRequest: PermissionRequest? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,6 +40,20 @@ class MainActivity : Activity() {
                 intent.type = "image/*"
                 startActivityForResult(android.content.Intent.createChooser(intent, "选择图片"), 1001)
                 return true
+            }
+
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                if (request == null) return
+                if (!request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                    runOnUiThread { request.deny() }
+                    return
+                }
+                if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    runOnUiThread { request.grant(request.resources) }
+                } else {
+                    pendingPermRequest = request
+                    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 2001)
+                }
             }
         }
         web.setDownloadListener { url, _, _, _, _ ->
@@ -66,6 +83,20 @@ class MainActivity : Activity() {
             return
         }
         super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        if (requestCode == 2001) {
+            val req = pendingPermRequest
+            pendingPermRequest = null
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED && req != null) {
+                runOnUiThread { req.grant(req.resources) }
+            } else {
+                req?.let { runOnUiThread { it.deny() } }
+            }
+            return
+        }
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
 
     @Deprecated("Deprecated in Java")
