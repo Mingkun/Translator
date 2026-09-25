@@ -1627,6 +1627,7 @@ function histNext() {
   var word = el.getAttribute('data-q') || '';
   var lang = /[\u4e00-\u9fff]/.test(word) ? 'zh-CN' : 'en';
   histCurrent = { word: word, lang: lang };
+  histShowWordCard(word);
   histIdx += 1;
   histPlaySound(histPlayUrl(word, lang), function () {
     if (!histPlaying || histPaused) return;
