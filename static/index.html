@@ -1864,10 +1864,6 @@ historyList.addEventListener('click', function (e) {
   } else if (histClicks === 2) {
     if (histListClickTimer) { clearTimeout(histListClickTimer); histListClickTimer = null; }
     histListClickTimer = setTimeout(function () { histListClickTimer = null; histClicks = 0; histSelectAdd(item); }, 300);
-  } else {
-    if (histListClickTimer) { clearTimeout(histListClickTimer); histListClickTimer = null; }
-    histClicks = 0;
-    histEnterTranslate(item);
   }
 });
 var histDragged = false;
