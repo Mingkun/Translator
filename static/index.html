@@ -100,7 +100,7 @@
       <button type="button" id="interpClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
     </div>
     <div id="interpBody" style="overflow:auto;flex:1;text-align:center">
-      <div id="interpHint" style="color:#5a6472;font-size:13px;padding:6px 0 12px">点 🎤 开始说话，再点一下结束并翻译</div>
+      <div id="interpHint" style="display:none;color:#5a6472;font-size:13px;padding:6px 0 12px"></div>
       <button type="button" id="interpRecBtn" style="width:96px;height:96px;border-radius:50%;border:none;background:#e8590c;color:#fff;font-size:38px;cursor:pointer;box-shadow:0 6px 18px rgba(232,89,12,.35)"><svg viewBox="0 0 24 24" width="44" height="44" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3z"/><path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.08A7 7 0 0 0 19 11z"/></svg></button>
       <div id="interpTimer" style="display:none;margin-top:10px;font-size:20px;font-weight:600;color:#b02a37;font-variant-numeric:tabular-nums">0:00</div>
       <div id="interpStatus" style="display:none;color:#5a6472;font-size:13px;padding:10px 0"></div>
@@ -1247,7 +1247,7 @@ var INTERP_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="current
 var INTERP_BIG_ICON = '<svg viewBox="0 0 24 24" width="44" height="44" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3z"/><path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.08A7 7 0 0 0 19 11z"/></svg>';
 var interpStream = null, interpRec = null, interpChunks = [], interpRecording = false, interpTimerInt = null, interpSecs = 0, interpAudio = null, interpSending = false;
 function interpShow(el, on) { var e = document.getElementById(el); if (e) e.style.display = on ? '' : 'none'; }
-function interpSetHint(t) { document.getElementById('interpHint').textContent = t; }
+function interpSetHint(t) { var e = document.getElementById('interpHint'); e.textContent = t || ''; e.style.display = t ? '' : 'none'; }
 function interpSetStatus(t) { var e = document.getElementById('interpStatus'); if (t) { e.style.display = ''; e.textContent = t; } else { e.style.display = 'none'; } }
 function interpReset() {
   interpRecording = false;
@@ -1262,7 +1262,7 @@ function interpReset() {
   interpShow('interpTimer', false); interpShow('interpResult', false); interpSetStatus('');
   var mb = document.getElementById('interpBtn');
   mb.style.background = ''; mb.style.color = ''; mb.innerHTML = INTERP_ICON;
-  interpSetHint('点 🎤 开始说话，再点一下结束并翻译');
+  interpSetHint('');
 }
 document.getElementById('interpBtn').addEventListener('click', function () {
   if (interpRecording) { interpStopRec(); return; }
