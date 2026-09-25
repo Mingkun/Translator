@@ -456,7 +456,8 @@ def api_news_audio():
     path = APP_ROOT / "data" / "news" / (h + ".mp3")
     if not path.is_file():
         abort(404)
-    return Response(path.read_bytes(), mimetype="audio/mpeg")
+    from flask import send_file as _send_file
+    return _send_file(path, mimetype="audio/mpeg", conditional=True)
 
 
 @app.get("/downloads/<path:name>")
