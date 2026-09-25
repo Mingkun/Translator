@@ -1545,26 +1545,34 @@ resultEl.addEventListener('touchend', function (e) {
   if (e.changedTouches.length !== 1) return;
   var dx = e.changedTouches[0].clientX - trTouchX;
   var dy = e.changedTouches[0].clientY - trTouchY;
-  if (dx < -60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
     trSwiped = true;
     setTimeout(function () { trSwiped = false; }, 400);
-    var q = (qEl.value || '').trim();
-    histOffset = 0;
-    historyOverlay.style.display = 'flex';
-    loadHistoryPage();
-    if (q) {
-      setTimeout(function () {
-        var els = historyList.querySelectorAll('[data-q]');
-        var hit = null;
-        for (var i = 0; i < els.length; i++) {
-          if ((els[i].getAttribute('data-q') || '').toLowerCase() === q.toLowerCase()) { hit = els[i]; break; }
-        }
-        if (hit) {
-          var face = histFace(hit);
-          if (face) face.style.background = '#fff3d6';
-          try { hit.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (err) {}
-        }
-      }, 600);
+    if (dx < 0) {
+      var q = (qEl.value || '').trim();
+      histOffset = 0;
+      historyOverlay.style.display = 'flex';
+      loadHistoryPage();
+      if (q) {
+        setTimeout(function () {
+          var els = historyList.querySelectorAll('[data-q]');
+          var hit = null;
+          for (var i = 0; i < els.length; i++) {
+            if ((els[i].getAttribute('data-q') || '').toLowerCase() === q.toLowerCase()) { hit = els[i]; break; }
+          }
+          if (hit) {
+            var face = histFace(hit);
+            if (face) face.style.background = '#fff3d6';
+            try { hit.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (err) {}
+          }
+        }, 600);
+      }
+    } else {
+      qEl.value = '';
+      resultEl.innerHTML = '';
+      try { if (trWordAudio) { trWordAudio.pause(); } } catch (e2) {}
+      var c = document.getElementById('trWordCard');
+      if (c) c.style.display = 'none';
     }
   }
 }, { passive: true });
