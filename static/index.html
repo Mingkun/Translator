@@ -1457,9 +1457,18 @@ function newsFmtDefInner(x) {
   }
   return '• ' + esc(String(x));
 }
+var histLastCardQ = '';
+document.getElementById('histWordCard').addEventListener('click', function (e) {
+  if (!histLastCardQ) return;
+  var word = histLastCardQ;
+  var lang = /[\u4e00-\u9fff]/.test(word) ? 'zh-CN' : 'en';
+  var a = new Audio(histPlayUrl(word, lang));
+  a.play().catch(function () {});
+});
 function histShowWordCard(q) {
   var card = document.getElementById('histWordCard');
   if (!card || !q) return;
+  histLastCardQ = q;
   card.style.display = 'block';
   card.innerHTML = '<div style="font-size:15px;font-weight:600;color:#1f2630">' + esc(q) + '</div><div style="font-size:12px;color:#5a6472;margin-top:4px">查询中…</div>';
   histBindCardClose();
