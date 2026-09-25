@@ -825,3 +825,98 @@ def fetch_realtime_quote(code: str) -> dict:
         "change": str(round(float(parts[3]) - float(parts[2]), 2)),
         "change_pct": str(round((float(parts[3]) - float(parts[2])) / float(parts[2]) * 100, 2)) if parts[2] != "0.000" else "0",
     }
+
+
+# ---------------------------------------------------------------- 口译 (speech interpretation)
+
+_INTERPRET_SYSTEM_PROMPT = (
+    "你是资深中英同传口译员。把用户的口语在中英文之间互译：中文翻成英文、英文翻成中文。"
+    "译文必须像母语者日常对话一样自然地道，优先使用当前最常用的习语和口语表达（如 gonna、no big deal、拿捏、靠谱），"
+    "避免书面腔和字面直译，保持说话人的语气和口语感。"
+    '只输出 JSON：{"translation":"地道口语化译文","detected":"en 或 zh-CN"}'
+)
+
+_INTERPRET_TIMEOUT = 60
+
+
+def _interpret_call(api_url: str, key: str, model: str, q: str) -> dict | None:
+    payload = json.dumps(
+        {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": _INTERPRET_SYSTEM_PROMPT},
+                {"role": "user", "content": q},
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.3,
+            "max_tokens": 1000,
+        }
+    ).encode()
+    req = urllib.request.Request(
+        api_url,
+        data=payload,
+        method="POST",
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}", "User-Agent": UA},
+    )
+    with urllib.request.urlopen(req, timeout=_INTERPRET_TIMEOUT) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    content = str((data.get("choices") or [{}])[0].get("message", {}).get("content") or "")
+    parsed = _extract_json_object(content)
+    if parsed is None:
+        return None
+    tr = str(parsed.get("translation") or "").strip()
+    if not tr:
+        return None
+    return {"translation": tr, "detected": str(parsed.get("detected") or "").strip()}
+
+
+def interpret_translate(q: str) -> dict | None:
+    """口译文译：deepseek 优先，GLM 兜底，均用口语化口译 prompt。"""
+    q = (q or "").strip()
+    if not q:
+        return None
+    try:
+        key = _deepseek_key()
+        if key:
+            r = _interpret_call("https://api.deepseek.com/chat/completions", key, "deepseek-flash", q)
+            if r:
+                return r
+    except Exception:
+        pass
+    try:
+        key = _zai_key()
+        if key:
+            r = _interpret_call("https://api.z.ai/api/coding/paas/v4/chat/completions", key, "glm-5.3", q)
+            if r:
+                return r
+    except Exception:
+        pass
+    return None
+
+
+_WHISPER_MODEL = None
+
+
+def interpret_transcribe(audio_bytes: bytes) -> dict:
+    """本地 faster-whisper 语音识别（中英自动检测）。"""
+    global _WHISPER_MODEL
+    import os
+    import tempfile
+
+    if _WHISPER_MODEL is None:
+        from faster_whisper import WhisperModel
+
+        _WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
+    suffix = ".webm"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+        f.write(audio_bytes)
+        tmp = f.name
+    try:
+        segments, info = _WHISPER_MODEL.transcribe(tmp, beam_size=1, vad_filter=True, initial_prompt="以下是普通话口语句子，请使用简体中文转写。")
+        text = " ".join(getattr(s, "text", "") for s in segments).strip()
+        return {"text": text, "lang": getattr(info, "language", "") or ""}
+    finally:
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass

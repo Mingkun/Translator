@@ -84,7 +84,8 @@
       <textarea id="q" placeholder="输入中文或英文…" autocomplete="off" style="flex:1;width:auto"></textarea>
       <button type="button" class="go" id="go" style="width:56px;margin-top:0;font-size:13px;padding:8px 0">翻译</button>
     </div>
-    <div style="display:flex;gap:8px;margin-top:10px">
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button type="button" class="gosec" id="interpBtn" title="口译">🎤 口译</button>
       <button type="button" class="gosec" id="newsBtn" title="每日新闻">📰 新闻</button>
       <button type="button" class="gosec" id="movieBtn" title="影视库">🎬 影视</button>
       <button type="button" class="gosec" id="ocrBtn" style="font-size:16px" title="截图翻译">📷</button>
@@ -92,7 +93,31 @@
     </div>
     <input type="file" id="imgInput" accept="image/*" style="display:none">
   </div>
-  <div id="sysOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
+  <div id="interpOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
+  <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <strong style="font-size:15px">🎤 口译</strong>
+      <button type="button" id="interpClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
+    </div>
+    <div id="interpBody" style="overflow:auto;flex:1;text-align:center">
+      <div id="interpHint" style="color:#5a6472;font-size:13px;padding:6px 0 12px">点击麦克风开始说话，再点一下结束并翻译</div>
+      <button type="button" id="interpRecBtn" style="width:96px;height:96px;border-radius:50%;border:none;background:#e8590c;color:#fff;font-size:38px;cursor:pointer;box-shadow:0 6px 18px rgba(232,89,12,.35)">🎤</button>
+      <div id="interpTimer" style="display:none;margin-top:10px;font-size:20px;font-weight:600;color:#b02a37;font-variant-numeric:tabular-nums">0:00</div>
+      <div id="interpStatus" style="display:none;color:#5a6472;font-size:13px;padding:10px 0"></div>
+      <div id="interpResult" style="display:none;text-align:left">
+        <div style="font-size:11px;color:#5a6472;margin:10px 0 4px">🗣 原文</div>
+        <div id="interpSrc" style="font-size:15px;line-height:1.7;background:#f0f4fa;border-radius:10px;padding:10px 12px;white-space:pre-wrap"></div>
+        <div style="font-size:11px;color:#5a6472;margin:12px 0 4px">🔁 地道译文（口语习惯表达）</div>
+        <div id="interpDst" style="font-size:16px;line-height:1.8;background:#fff3d6;border-radius:10px;padding:10px 12px;white-space:pre-wrap"></div>
+        <div style="display:flex;gap:8px;margin-top:12px;justify-content:center">
+          <button type="button" id="interpPlay" style="border:1px solid #c7d0dc;background:#fff;border-radius:8px;padding:6px 16px;font-size:13px;cursor:pointer">🔊 播放译文</button>
+          <button type="button" id="interpAgain" style="border:1px solid #c7d0dc;background:#fff;border-radius:8px;padding:6px 16px;font-size:13px;cursor:pointer">🎤 再来一段</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="sysOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
   <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:16px;max-height:calc(100vh - 48px);overflow-y:auto;-webkit-overflow-scrolling:touch;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
       <strong style="font-size:15px">⚙ 系统</strong>
@@ -1216,6 +1241,95 @@ document.getElementById('newsPlay').addEventListener('click', function () {
 document.getElementById('newsStop').addEventListener('click', newsStopPlay);
 var lastAutoPlayUrl = null;
 var sysOverlay = document.getElementById('sysOverlay');
+var interpOverlay = document.getElementById('interpOverlay');
+var interpStream = null, interpRec = null, interpChunks = [], interpRecording = false, interpTimerInt = null, interpSecs = 0, interpAudio = null;
+function interpShow(el, on) { var e = document.getElementById(el); if (e) e.style.display = on ? '' : 'none'; }
+function interpSetHint(t) { document.getElementById('interpHint').textContent = t; }
+function interpSetStatus(t) { var e = document.getElementById('interpStatus'); if (t) { e.style.display = ''; e.textContent = t; } else { e.style.display = 'none'; } }
+function interpReset() {
+  interpRecording = false;
+  try { if (interpRec && interpRec.state === 'recording') interpRec.stop(); } catch (e) {}
+  if (interpStream) { interpStream.getTracks().forEach(function (t) { t.stop(); }); interpStream = null; }
+  if (interpTimerInt) { clearInterval(interpTimerInt); interpTimerInt = null; }
+  if (interpAudio) { try { interpAudio.pause(); } catch (e) {} interpAudio = null; }
+  interpChunks = []; interpSecs = 0;
+  var rb = document.getElementById('interpRecBtn');
+  rb.style.background = '#e8590c'; rb.textContent = '🎤';
+  interpShow('interpTimer', false); interpShow('interpResult', false); interpSetStatus('');
+  interpSetHint('点击麦克风开始说话，再点一下结束并翻译');
+}
+document.getElementById('interpBtn').addEventListener('click', function () { interpOverlay.style.display = 'flex'; fitOverlays(); interpReset(); });
+document.getElementById('interpClose').addEventListener('click', function () { interpReset(); interpOverlay.style.display = 'none'; });
+interpOverlay.addEventListener('click', function (e) { if (e.target === interpOverlay) { interpReset(); interpOverlay.style.display = 'none'; } });
+function interpTick() {
+  interpSecs++;
+  var m = Math.floor(interpSecs / 60), s2 = interpSecs % 60;
+  document.getElementById('interpTimer').textContent = m + ':' + (s2 < 10 ? '0' : '') + s2;
+  if (interpSecs >= 120) interpStopRec();
+}
+function interpStartRec() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') { interpSetHint('此浏览器不支持录音'); return; }
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+    interpStream = stream; interpChunks = [];
+    try { interpRec = new MediaRecorder(stream); } catch (e) { interpSetHint('录音初始化失败'); return; }
+    interpRec.ondataavailable = function (e) { if (e.data && e.data.size) interpChunks.push(e.data); };
+    interpRec.onstop = interpSend;
+    interpRec.start();
+    interpRecording = true; interpSecs = 0;
+    interpShow('interpResult', false); interpSetStatus('');
+    interpShow('interpTimer', true);
+    var rb = document.getElementById('interpRecBtn');
+    rb.style.background = '#b02a37'; rb.textContent = '⏹';
+    interpSetHint('正在录音…点击停止并翻译');
+    interpTimerInt = setInterval(interpTick, 1000);
+  }).catch(function () { interpSetHint('无法访问麦克风，请检查权限'); });
+}
+function interpStopRec() {
+  if (!interpRecording) return;
+  interpRecording = false;
+  if (interpTimerInt) { clearInterval(interpTimerInt); interpTimerInt = null; }
+  try { interpRec.stop(); } catch (e) {}
+  if (interpStream) { interpStream.getTracks().forEach(function (t) { t.stop(); }); interpStream = null; }
+  var rb = document.getElementById('interpRecBtn');
+  rb.style.background = '#e8590c'; rb.textContent = '🎤';
+  interpShow('interpTimer', false);
+  interpSetStatus('🎙 识别中…');
+}
+document.getElementById('interpRecBtn').addEventListener('click', function () { if (interpRecording) { interpStopRec(); } else { interpStartRec(); } });
+function interpErr(msg) { interpSetStatus(''); interpSetHint(msg || '出错了，请重试'); }
+function interpSend() {
+  var blob = new Blob(interpChunks, { type: (interpRec && interpRec.mimeType) || 'audio/webm' });
+  interpChunks = [];
+  if (!blob.size || blob.size < 1000) { interpErr('录音太短，再试一次'); return; }
+  var fd = new FormData();
+  fd.append('audio', blob, 'speech.webm');
+  var url = 'api/interpret?token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
+  interpSetStatus('🎙 识别中…');
+  fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d || !d.ok) { interpErr((d && d.error) || '识别失败，请重试'); return; }
+      interpSetStatus('');
+      document.getElementById('interpSrc').textContent = d.transcript || '';
+      document.getElementById('interpDst').textContent = d.translation || '';
+      interpShow('interpResult', true);
+      interpSetHint('完成 ✅');
+      if (d.translation) interpPlayText(d.translation);
+    })
+    .catch(function () { interpErr('网络错误，请重试'); });
+}
+function interpPlayText(text) {
+  var lang = /[\u4e00-\u9fff]/.test(text) ? 'zh-CN' : 'en';
+  try { if (interpAudio) interpAudio.pause(); } catch (e) {}
+  interpAudio = new Audio('api/tts?text=' + encodeURIComponent(text) + '&lang=' + lang + '&voice=' + ttsVoiceFor(lang) + '&token=' + encodeURIComponent(window.API_TOKEN || ''));
+  interpAudio.play().catch(function () {});
+}
+document.getElementById('interpPlay').addEventListener('click', function () {
+  var t = document.getElementById('interpDst').textContent.trim();
+  if (t) interpPlayText(t);
+});
+document.getElementById('interpAgain').addEventListener('click', function () { interpReset(); });
+
 var playbackMode = localStorage.getItem('tr_playbackMode') || 'both';
 var playbackCount = parseInt(localStorage.getItem('tr_playbackCount') || '20', 10) || 20;
 var playbackLoop = localStorage.getItem('tr_playbackLoop') === 'true';
@@ -1397,7 +1511,7 @@ function fitOverlays() {
   if (!sys || !nb) return;
   var padTop = Math.max(0, sys.getBoundingClientRect().bottom);
   var padBottom = Math.max(0, window.innerHeight - nb.getBoundingClientRect().top);
-  [newsOverlay, movieOverlay, historyOverlay, sysOverlay].forEach(function (ov) {
+  [newsOverlay, movieOverlay, historyOverlay, sysOverlay, interpOverlay].forEach(function (ov) {
     if (!ov) return;
     ov.style.boxSizing = 'border-box';
     ov.style.paddingTop = padTop + 'px';

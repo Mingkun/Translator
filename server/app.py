@@ -205,6 +205,38 @@ def api_ocr_translate():
         return jsonify(ok=False, error=f"识别或翻译失败: {exc}"), 502
 
 
+@app.post("/api/interpret")
+def api_interpret():
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    file = request.files.get("audio")
+    if file is None:
+        return jsonify(ok=False, error="缺少音频"), 400
+    data = file.read()
+    if len(data) < 200:
+        return jsonify(ok=False, error="录音太短"), 400
+    if len(data) > 20 * 1024 * 1024:
+        return jsonify(ok=False, error="音频过大（限20MB）"), 400
+    try:
+        tr = engine.interpret_transcribe(data)
+    except Exception as exc:  # noqa: BLE001
+        app.logger.warning("interpret transcribe failed: %s", exc)
+        return jsonify(ok=False, error="语音识别失败，请重试"), 500
+    if not tr or not tr.get("text"):
+        return jsonify(ok=False, error="没有识别到语音内容"), 400
+    out = {"ok": True, "transcript": tr["text"], "lang": tr.get("lang", "")}
+    try:
+        res = engine.interpret_translate(tr["text"])
+        if res:
+            out["translation"] = res.get("translation", "")
+            if res.get("detected"):
+                out["detected"] = res["detected"]
+    except Exception as exc:  # noqa: BLE001
+        app.logger.warning("interpret translate failed: %s", exc)
+    out.setdefault("translation", "")
+    return jsonify(out)
+
+
 @app.post("/api/user/login")
 def api_user_login():
     if not _authorized():
