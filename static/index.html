@@ -1289,7 +1289,7 @@ function interpStartRec() {
     var mb = document.getElementById('interpBtn');
     mb.style.background = '#b02a37'; mb.style.color = '#fff'; mb.textContent = '0:00';
     interpTimerInt = setInterval(interpTick, 1000);
-  }).catch(function () { interpOpenHint('无法访问麦克风，请在弹窗中允许麦克风权限后重试'); });
+  }).catch(function (err) { interpOpenHint('无法访问麦克风（' + ((err && err.name) || '未知错误') + '），请在系统设置中允许麦克风权限后重试'); });
 }
 function interpOpenHint(msg) {
   interpOverlay.style.display = 'flex'; fitOverlays(); interpReset();

@@ -60,6 +60,9 @@ class MainActivity : Activity() {
             val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
             startActivity(intent)
         }
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 2002)
+        }
         setContentView(web)
         if (savedInstanceState != null) {
             web.restoreState(savedInstanceState)
