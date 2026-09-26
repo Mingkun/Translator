@@ -133,6 +133,8 @@
       <strong style="font-size:15px">⚙ 系统</strong>
       <button type="button" id="sysClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
     </div>
+    <div style="font-size:12px;color:var(--muted);font-weight:600;margin:14px 2px 6px">🔊 语速</div>
+    <div id="ttsRateRow" style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" data-rate="50" style="flex:1;min-width:44px;border:1px solid var(--line);border-radius:8px;padding:5px 0;font-size:12px;cursor:pointer;background:#f0f4fa;color:#5a6472">50%</button><button type="button" data-rate="75" style="flex:1;min-width:44px;border:1px solid var(--line);border-radius:8px;padding:5px 0;font-size:12px;cursor:pointer;background:#f0f4fa;color:#5a6472">75%</button><button type="button" data-rate="100" style="flex:1;min-width:44px;border:1px solid var(--line);border-radius:8px;padding:5px 0;font-size:12px;cursor:pointer;background:#f0f4fa;color:#5a6472">100%</button><button type="button" data-rate="125" style="flex:1;min-width:44px;border:1px solid var(--line);border-radius:8px;padding:5px 0;font-size:12px;cursor:pointer;background:#f0f4fa;color:#5a6472">125%</button><button type="button" data-rate="150" style="flex:1;min-width:44px;border:1px solid var(--line);border-radius:8px;padding:5px 0;font-size:12px;cursor:pointer;background:#f0f4fa;color:#5a6472">150%</button><button type="button" data-rate="200" style="flex:1;min-width:44px;border:1px solid var(--line);border-radius:8px;padding:5px 0;font-size:12px;cursor:pointer;background:#f0f4fa;color:#5a6472">200%</button></div>
     <div style="font-size:12px;color:var(--muted);font-weight:600;margin:14px 2px 6px">📥 客户端下载</div>
     <div style="display:flex;flex-direction:column;gap:10px;">
       <a href="downloads/translator-android-debug.apk" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--text);font-size:14px">
@@ -512,7 +514,7 @@ movieList.addEventListener('dblclick', function (e) {
 });
 
 function mvSpeakUrl(text) {
-  return 'api/tts?text=' + encodeURIComponent(text) + '&lang=en&voice=' + ttsVoiceFor('en') + '&rate=-10%25&token=' + encodeURIComponent(window.API_TOKEN || '');
+  return 'api/tts?text=' + encodeURIComponent(text) + '&lang=en&voice=' + ttsVoiceFor('en') + ttsRateParam() + '&token=' + encodeURIComponent(window.API_TOKEN || '');
 }
 function mvLoad() {
   mvSoloStop();
@@ -1076,7 +1078,7 @@ document.getElementById('newsWordCard').addEventListener('click', function (e) {
   if (e.target && e.target.id === 'newsWordClose') return;
   if (!newsLastWord) return;
   try { if (newsWordAudio) { newsWordAudio.pause(); } } catch (err) {}
-  newsWordAudio = new Audio(newsApi('api/tts?text=' + encodeURIComponent(newsLastWord) + '&lang=en'));
+  newsWordAudio = new Audio(newsApi('api/tts?text=' + encodeURIComponent(newsLastWord) + '&lang=en' + ttsRateParam()));
   newsWordAudio.play().catch(function () {});
 });
 function newsBindWordClose() {
@@ -1199,7 +1201,7 @@ function newsLookupWord(span) {
       if (card && !fastShown) card.innerHTML = '<div style="font-size:14px;color:#b02a37">查询失败</div>';
     });
   try { if (newsWordAudio) { newsWordAudio.pause(); } } catch (e) {}
-  newsWordAudio = new Audio(newsApi('api/tts?text=' + encodeURIComponent(word) + '&lang=en'));
+  newsWordAudio = new Audio(newsApi('api/tts?text=' + encodeURIComponent(word) + '&lang=en' + ttsRateParam()));
   newsWordAudio.onended = function () {
     if (newsWordWasPlaying && !newsPaused && newsAudio) {
       newsWordWasPlaying = false;
@@ -1251,6 +1253,31 @@ document.getElementById('newsPlay').addEventListener('click', function () {
 document.getElementById('newsStop').addEventListener('click', newsStopPlay);
 var lastAutoPlayUrl = null;
 var sysOverlay = document.getElementById('sysOverlay');
+var TTS_RATE = parseInt(localStorage.getItem('ttsRate') || '100', 10) || 100;
+function ttsRateParam() {
+  if (TTS_RATE === 100) return '';
+  var d = TTS_RATE - 100;
+  return '&rate=' + (d > 0 ? '%2B' + d : d) + '%25';
+}
+function ttsRateRender() {
+  var row = document.getElementById('ttsRateRow');
+  if (!row) return;
+  var btns = row.querySelectorAll('[data-rate]');
+  for (var i = 0; i < btns.length; i++) {
+    var on = parseInt(btns[i].getAttribute('data-rate'), 10) === TTS_RATE;
+    btns[i].style.background = on ? '#e8590c' : '#f0f4fa';
+    btns[i].style.color = on ? '#fff' : '#5a6472';
+    btns[i].style.borderColor = on ? '#e8590c' : 'var(--line)';
+  }
+}
+document.getElementById('ttsRateRow').addEventListener('click', function (e) {
+  var el = e.target && e.target.closest ? e.target.closest('[data-rate]') : null;
+  if (!el) return;
+  TTS_RATE = parseInt(el.getAttribute('data-rate'), 10) || 100;
+  localStorage.setItem('ttsRate', String(TTS_RATE));
+  ttsRateRender();
+});
+ttsRateRender();
 var interpOverlay = document.getElementById('interpOverlay');
 var INTERP_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3z"/><path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.08A7 7 0 0 0 19 11z"/></svg>';
 var INTERP_BIG_ICON = '<svg viewBox="0 0 24 24" width="44" height="44" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3z"/><path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.08A7 7 0 0 0 19 11z"/></svg>';
@@ -1357,7 +1384,7 @@ function interpSend() {
 function interpPlayText(text) {
   var lang = /[\u4e00-\u9fff]/.test(text) ? 'zh-CN' : 'en';
   try { if (interpAudio) interpAudio.pause(); } catch (e) {}
-  interpAudio = new Audio('api/tts?text=' + encodeURIComponent(text) + '&lang=' + lang + '&voice=' + ttsVoiceFor(lang) + '&token=' + encodeURIComponent(window.API_TOKEN || ''));
+  interpAudio = new Audio('api/tts?text=' + encodeURIComponent(text) + '&lang=' + lang + '&voice=' + ttsVoiceFor(lang) + ttsRateParam() + '&token=' + encodeURIComponent(window.API_TOKEN || ''));
   interpAudio.play().catch(function () {});
 }
 document.getElementById('interpPlay').addEventListener('click', function () {
@@ -1634,7 +1661,7 @@ var histIdx = 0;
 var histReplayCount = 0;
 var histClickTimer = null;
 function histPlayUrl(text, lang) {
-  return 'api/tts?text=' + encodeURIComponent(text) + '&lang=' + lang + '&voice=' + ttsVoiceFor(lang) + '&token=' + encodeURIComponent(window.API_TOKEN || '');
+  return 'api/tts?text=' + encodeURIComponent(text) + '&lang=' + lang + '&voice=' + ttsVoiceFor(lang) + ttsRateParam() + '&token=' + encodeURIComponent(window.API_TOKEN || '');
 }
 function histSchedule(fn, ms) {
   if (histPlayTimer) { clearTimeout(histPlayTimer); }
