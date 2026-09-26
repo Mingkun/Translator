@@ -1534,7 +1534,7 @@ imgInput.addEventListener('change', function(){
       render(d);
       var pre = document.createElement('div');
       pre.className = 'card';
-      pre.innerHTML = '<div class="sec-title" style="margin-top:0">识别到的文字</div><div style="font-size:14px;white-space:pre-wrap;line-height:1.7">' + esc(d.extracted || '') + '</div>';
+      pre.innerHTML = '<div class="sec-title" style="margin-top:0">识别到的文字</div><div style="font-size:14px;white-space:pre-wrap;line-height:1.7">' + twWrap(d.extracted || '') + '</div>';
       resultEl.insertBefore(pre, resultEl.firstChild);
     })
     .catch(function(){ resultEl.innerHTML = '<div class="card"><div class="err">上传失败，请重试</div></div>'; });
