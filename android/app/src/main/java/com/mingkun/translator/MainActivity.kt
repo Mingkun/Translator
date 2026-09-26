@@ -14,6 +14,7 @@ class MainActivity : Activity() {
     private lateinit var web: WebView
     private var filePathCallback: android.webkit.ValueCallback<Array<android.net.Uri>>? = null
     private var pendingPermRequest: PermissionRequest? = null
+    private var updateDownloadId = -1L
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,14 +57,43 @@ class MainActivity : Activity() {
                 }
             }
         }
-        web.setDownloadListener { url, _, _, _, _ ->
-            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
-            startActivity(intent)
+        web.setDownloadListener { url, _, contentDisposition, mimeType, _ ->
+            try {
+                val name = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
+                val isApk = name.endsWith(".apk", true)
+                val request = android.app.DownloadManager.Request(android.net.Uri.parse(url))
+                request.setMimeType(mimeType)
+                request.setTitle(name)
+                val cookies = android.webkit.CookieManager.getInstance().getCookie(url)
+                if (cookies != null) request.addRequestHeader("cookie", cookies)
+                request.addRequestHeader("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36")
+                request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                if (isApk) {
+                    request.setDestinationInExternalFilesDir(this, null, "translator-update.apk")
+                } else {
+                    request.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, name)
+                }
+                val dm = getSystemService(DOWNLOAD_SERVICE) as android.app.DownloadManager
+                val id = dm.enqueue(request)
+                if (isApk) updateDownloadId = id
+            } catch (e: Exception) {
+                try {
+                    startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                } catch (_: Exception) {
+                }
+            }
         }
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 2002)
         }
         setContentView(web)
+        registerReceiver(object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                val id = intent?.getLongExtra(android.app.DownloadManager.EXTRA_DOWNLOAD_ID, -1L) ?: -1L
+                if (id > 0 && id == updateDownloadId) openDownloadedApk()
+            }
+        }, android.content.IntentFilter(android.app.DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+
         if (savedInstanceState != null) {
             web.restoreState(savedInstanceState)
         } else {
@@ -100,6 +130,22 @@ class MainActivity : Activity() {
             return
         }
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
+    private fun openDownloadedApk() {
+        try {
+            val dir = getExternalFilesDir(null) ?: return
+            val file = java.io.File(dir, "translator-update.apk")
+            if (!file.exists()) return
+            val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val install = android.content.Intent(android.content.Intent.ACTION_VIEW)
+            install.setDataAndType(uri, "application/vnd.android.package-archive")
+            install.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            install.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(install)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     @Deprecated("Deprecated in Java")

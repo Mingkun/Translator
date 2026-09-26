@@ -1463,6 +1463,12 @@ if (document.getElementById('trCheckUp')) document.getElementById('trCheckUp').a
       var last = localStorage.getItem('tr_seenVer') || '';
       var isNew = String(d.versionName) !== last;
       info.innerHTML = '最新版本 v' + esc(String(d.versionName)) + (isNew ? ' 🆕' : '') + (d.note ? '<br>更新内容：' + esc(String(d.note)) : '') + '<br><a href="downloads/translator-android-debug.apk" style="color:#7048a8">安卓客户端</a> · <a href="downloads/translator-windows-x64.zip" style="color:#7048a8">Windows 客户端</a>';
+      if (isNew && window.confirm('发现新版本 v' + d.versionName + (d.note ? '\n' + d.note : '') + '\n\n立即下载安装？')) {
+        var isWv = /;\s*wv\)/.test(navigator.userAgent);
+        if (isWv) { location.href = 'downloads/translator-android-debug.apk'; }
+        else { location.reload(); }
+        return;
+      }
       localStorage.setItem('tr_seenVer', String(d.versionName));
     })
     .catch(function () { info.textContent = '检查失败，请稍后重试'; });
