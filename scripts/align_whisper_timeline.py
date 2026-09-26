@@ -96,40 +96,24 @@ def main(item_id: int) -> None:
     with open('/tmp/see_align_wwords.json', 'w', encoding='utf-8') as f:
         json.dump([[w[0], w[1], w[2]] for w in wwords], f, ensure_ascii=False)
 
-    Nw = len(wwords)
-    Na = len(aw)
-    prop = (Nw / Na) if Na else 1.0
-    RADIUS = 80
-    offsets = [0]
-    for dd in range(1, RADIUS + 1):
-        offsets.extend([dd, -dd])
-    out = [None] * Na
-    last_k = -1
-    last_t = 0.0
+    import difflib
     anorm = [norm(a) for a in aw]
     wnorm = [w[0] for w in wwords]
-    for i in range(Na):
-        na = anorm[i]
-        if not na:
-            continue
-        center = int(i * prop)
-        for off in offsets:
-            k = center + off
-            if k < 0 or k >= Nw or k <= last_k:
-                continue
-            nw = wnorm[k]
-            if na == nw or (min(len(na), len(nw)) >= 4 and (na in nw or nw in na)):
-                t = wwords[k][1]
-                out[i] = t
-                last_k = k
-                last_t = t
-                break
+    sm = difflib.SequenceMatcher(None, anorm, wnorm, autojunk=False)
+    out = [None] * len(aw)
+    for b in sm.get_matching_blocks():
+        for x in range(b.size):
+            if b.a + x < len(aw) and b.b + x < len(wnorm):
+                out[b.a + x] = wwords[b.b + x][1]
+    prev = -1.0
+    for i in range(len(out)):
+        if out[i] is not None:
+            if out[i] >= prev - 0.05:
+                prev = out[i]
+            else:
+                out[i] = None
     matched = sum(1 for x in out if x is not None)
-    print('matched:', matched, '/', len(aw), f'({matched * 100 // max(1, len(aw))}%)', flush=True)
-    for dec in range(10):
-        lo, hi = Na * dec // 10, Na * (dec + 1) // 10
-        seg = out[lo:hi]
-        print(f'  decile {dec}: anchors {sum(1 for x in seg if x is not None)}/{hi-lo}', flush=True)
+    print('difflib anchors:', matched, '/', len(aw), f'({matched * 100 // max(1, len(aw))}%)', flush=True)
 
     # 插值补洞
     last = -1
