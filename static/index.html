@@ -138,82 +138,82 @@
       <button type="button" id="logoutBtn" style="border:1px solid var(--line);background:#fff;border-radius:6px;padding:3px 12px;font-size:12px;cursor:pointer;color:#5a6472">退出登录</button>
     </div>
         <div id="mgrGroup" style="display:none">
-      <div style="font-size:12px;color:var(--muted);font-weight:600;margin:14px 2px 6px">👥 用户管理</div>
+      <div style="font-size:13px;color:var(--muted);font-weight:600;margin:14px 2px 6px">👥 用户管理</div>
       <div style="background:#f6f8fb;border:1px solid #e3e8ef;border-radius:10px;padding:8px 12px">
         <button type="button" id="mgrRefresh" style="border:none;background:#e8590c;color:#fff;border-radius:8px;padding:6px 16px;font-size:12px;cursor:pointer;margin-bottom:6px">刷新用户统计</button>
         <div id="mgrUserList" style="font-size:12px"></div>
       </div>
     </div>
-    <div style="font-size:12px;color:var(--muted);font-weight:600;margin:14px 2px 6px">🔤 翻译设置</div>
+    <div style="font-size:13px;color:var(--muted);font-weight:600;margin:14px 2px 6px">🔤 翻译设置</div>
     <div style="background:#f6f8fb;border:1px solid var(--line);border-radius:12px;padding:2px 14px">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
-        <span style="font-size:14px;">翻译方向　<span id="dirLabel" style="font-size:12px;color:var(--muted)">自动检测 → 自动</span></span>
+        <span style="font-size:12px;">翻译方向　<span id="dirLabel" style="font-size:12px;color:var(--muted)">自动检测 → 自动</span></span>
         <button type="button" class="swap" id="swap">⇄ 切换</button>
       </div>
     </div>
-<div style="font-size:12px;color:var(--muted);font-weight:600;margin:14px 2px 6px">🔊 播放设置</div>
+<div style="font-size:13px;color:var(--muted);font-weight:600;margin:14px 2px 6px">🔊 播放设置</div>
 <div style="background:#f6f8fb;border:1px solid var(--line);border-radius:12px;padding:2px 14px">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px dashed var(--line);">
-      <span style="font-size:14px;">播放内容</span>
+      <span style="font-size:12px;">播放内容</span>
       <div style="display:flex;gap:8px;">
         <button type="button" id="playModeBoth" style="border:1px solid var(--line);background:#e8590c;color:#fff;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer">单词+例句</button>
         <button type="button" id="playModeWord" style="border:1px solid var(--line);background:#fff;color:var(--text);border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer">仅单词</button>
       </div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
-      <span style="font-size:14px;">发音音色</span>
+      <span style="font-size:12px;">发音音色</span>
       <div style="display:flex;gap:8px;">
         <button type="button" id="voiceMale" style="border:1px solid var(--line);background:#e8590c;color:#fff;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer">男声</button>
         <button type="button" id="voiceFemale" style="border:1px solid var(--line);background:#fff;color:var(--text);border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer">女声</button>
       </div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px dashed var(--line);">
-      <span style="font-size:14px;white-space:nowrap;flex-shrink:0">语速</span>
-      <div id="ttsRateRow" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button type="button" data-rate="50" style="border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:11px;cursor:pointer;background:#f0f4fa;color:#5a6472">50%</button><button type="button" data-rate="75" style="border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:11px;cursor:pointer;background:#f0f4fa;color:#5a6472">75%</button><button type="button" data-rate="100" style="border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:11px;cursor:pointer;background:#f0f4fa;color:#5a6472">100%</button><button type="button" data-rate="125" style="border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:11px;cursor:pointer;background:#f0f4fa;color:#5a6472">125%</button><button type="button" data-rate="150" style="border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:11px;cursor:pointer;background:#f0f4fa;color:#5a6472">150%</button><button type="button" data-rate="200" style="border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:11px;cursor:pointer;background:#f0f4fa;color:#5a6472">200%</button></div>
+      <span style="font-size:12px;white-space:nowrap;flex-shrink:0">语速</span>
+      <div id="ttsRateRow" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button type="button" data-rate="50" style="border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px;cursor:pointer;background:#f0f4fa;color:#5a6472">50%</button><button type="button" data-rate="75" style="border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px;cursor:pointer;background:#f0f4fa;color:#5a6472">75%</button><button type="button" data-rate="100" style="border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px;cursor:pointer;background:#f0f4fa;color:#5a6472">100%</button><button type="button" data-rate="125" style="border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px;cursor:pointer;background:#f0f4fa;color:#5a6472">125%</button><button type="button" data-rate="150" style="border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px;cursor:pointer;background:#f0f4fa;color:#5a6472">150%</button><button type="button" data-rate="200" style="border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px;cursor:pointer;background:#f0f4fa;color:#5a6472">200%</button></div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
-      <span style="font-size:14px;">连续播放条数</span>
+      <span style="font-size:12px;">连续播放条数</span>
       <div style="display:flex;align-items:center;gap:8px;">
-        <input type="number" id="playCount" min="1" max="200" value="20" style="width:64px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;text-align:center;">
+        <input type="number" id="playCount" min="1" max="200" value="20" style="width:64px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;text-align:center;">
         <span style="font-size:12px;color:var(--muted)">条</span>
       </div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
-      <span style="font-size:14px;">循环播放</span>
+      <span style="font-size:12px;">循环播放</span>
       <button type="button" id="playLoop" style="border:1px solid var(--line);background:#fff;color:var(--text);border-radius:20px;padding:4px 18px;font-size:13px;cursor:pointer">关</button>
     </div>
     </div>
-    <div style="font-size:12px;color:var(--muted);font-weight:600;margin:14px 2px 6px">📈 行情设置</div>
+    <div style="font-size:13px;color:var(--muted);font-weight:600;margin:14px 2px 6px">📈 行情设置</div>
     <div style="background:#f6f8fb;border:1px solid var(--line);border-radius:12px;padding:2px 14px">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px dashed var(--line);">
-      <span style="font-size:14px;">显示行情</span>
+      <span style="font-size:12px;">显示行情</span>
       <button type="button" id="quoteOn" style="border:1px solid var(--line);background:#e8590c;color:#fff;border-radius:20px;padding:4px 18px;font-size:13px;cursor:pointer">开</button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px dashed var(--line);">
-      <span style="font-size:14px;">股票代码</span>
+      <span style="font-size:12px;">股票代码</span>
       <input type="text" id="quoteCode" placeholder="HK02513 / 600519" style="width:120px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;text-align:center" value="HK02513">
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
-      <span style="font-size:14px;">刷新周期(秒)</span>
+      <span style="font-size:12px;">刷新周期(秒)</span>
       <input type="number" id="quoteInterval" min="3" max="60" style="width:64px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;text-align:center" value="3">
     </div>
     </div>
-    <div style="font-size:12px;color:var(--muted);font-weight:600;margin:14px 2px 6px">📥 客户端下载</div>
+    <div style="font-size:13px;color:var(--muted);font-weight:600;margin:14px 2px 6px">📥 客户端下载</div>
     <div style="display:flex;flex-direction:column;gap:10px;">
-      <a href="downloads/translator-android-debug.apk" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--text);font-size:14px">
+      <a href="downloads/translator-android-debug.apk" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--text);font-size:12px">
         <span style="font-size:22px">📱</span>
         <div><div>安卓客户端</div><div style="font-size:11px;color:var(--muted)">APK 安装包</div></div>
       </a>
-      <a href="downloads/translator-windows-x64.zip" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--text);font-size:14px">
+      <a href="downloads/translator-windows-x64.zip" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--text);font-size:12px">
         <span style="font-size:22px">💻</span>
         <div><div>Windows 客户端</div><div style="font-size:11px;color:var(--muted)">ZIP 免安装绿色版</div></div>
       </a>
-      <button type="button" id="iosPwaBtn" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:14px;color:var(--text);background:#fff;cursor:pointer;width:100%;box-sizing:border-box">
+      <button type="button" id="iosPwaBtn" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:12px;color:var(--text);background:#fff;cursor:pointer;width:100%;box-sizing:border-box">
         <span style="font-size:22px">🍎</span>
         <div style="text-align:left"><div>iPhone 使用</div><div style="font-size:11px;color:var(--muted)">Safari 添加到主屏幕</div></div>
       </button>
     </div>
-    <div style="font-size:12px;color:var(--muted);font-weight:600;margin:14px 2px 6px">🔄 版本与更新</div>
+    <div style="font-size:13px;color:var(--muted);font-weight:600;margin:14px 2px 6px">🔄 版本与更新</div>
     <div style="background:#f6f8fb;border:1px solid #e3e8ef;border-radius:10px;padding:2px 12px">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
         <span style="font-size:12px;">当前版本 <span id="trVer" style="font-size:12px;color:#5a6472">…</span></span>
