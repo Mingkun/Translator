@@ -1075,6 +1075,151 @@ newsDetailBody.addEventListener('touchcancel', function () {
   newsDragSel.active = false;
   clearWordRange();
 });
+
+/* ===== 圈词定位播放：绕某个词画圈 → 从该词开始播放 ===== */
+var ncPts = [], ncActive = false, ncSvg = null, ncPoly = null, ncMouse = false, ncLock = false, ncCx = 0, ncCy = 0;
+function ncOverlay() {
+  if (!ncSvg || ncSvg.parentNode !== newsDetailBody) {
+    ncSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    ncSvg.setAttribute('width', '100%');
+    ncSvg.setAttribute('height', '100%');
+    ncSvg.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:4;overflow:visible';
+    newsDetailBody.appendChild(ncSvg);
+  }
+  if (newsDetailBody.style.position !== 'relative' && getComputedStyle(newsDetailBody).position === 'static') newsDetailBody.style.position = 'relative';
+  return ncSvg;
+}
+function ncBegin(x, y) {
+  ncPts = [{ x: x, y: y }];
+  ncActive = true; ncLock = false;
+  ncOverlay();
+  ncPoly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+  ncPoly.setAttribute('fill', 'none');
+  ncPoly.setAttribute('stroke', '#e8590c');
+  ncPoly.setAttribute('stroke-width', '2.5');
+  ncPoly.setAttribute('stroke-linecap', 'round');
+  ncPoly.setAttribute('stroke-linejoin', 'round');
+  ncPoly.setAttribute('opacity', '0.9');
+  ncSvg.appendChild(ncPoly);
+}
+function ncMove(x, y, e) {
+  if (!ncActive) return;
+  var lp = ncPts[ncPts.length - 1];
+  if (Math.abs(x - lp.x) < 2 && Math.abs(y - lp.y) < 2) return;
+  ncPts.push({ x: x, y: y });
+  var r = newsDetailBody.getBoundingClientRect();
+  var str = '';
+  for (var i = 0; i < ncPts.length; i++) str += (i ? ' ' : '') + (ncPts[i].x - r.left).toFixed(1) + ',' + (ncPts[i].y - r.top).toFixed(1);
+  ncPoly.setAttribute('points', str);
+  if (!ncLock && ncTurned()) ncLock = true;
+  if (ncLock && e && e.cancelable) e.preventDefault();
+}
+function ncTurned() {
+  if (ncPts.length < 5) return false;
+  var sum = 0;
+  for (var i = 2; i < ncPts.length; i++) {
+    var a1 = Math.atan2(ncPts[i - 1].y - ncPts[i - 2].y, ncPts[i - 1].x - ncPts[i - 2].x);
+    var a2 = Math.atan2(ncPts[i].y - ncPts[i - 1].y, ncPts[i].x - ncPts[i - 1].x);
+    var d = a2 - a1;
+    while (d > Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    sum += Math.abs(d);
+  }
+  return sum > 1.6;
+}
+function ncEnd() {
+  if (!ncActive) return false;
+  ncActive = false;
+  var ok = ncJudge();
+  var poly = ncPoly; ncPoly = null;
+  if (poly) {
+    poly.style.transition = 'opacity .5s';
+    poly.style.opacity = '0';
+    setTimeout(function () { if (poly.parentNode) poly.parentNode.removeChild(poly); }, 550);
+  }
+  if (ok) ncSeek();
+  return ok;
+}
+function ncJudge() {
+  if (ncPts.length < 6) return false;
+  var L = 0, minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9, i;
+  for (i = 1; i < ncPts.length; i++) {
+    var dx = ncPts[i].x - ncPts[i - 1].x, dy = ncPts[i].y - ncPts[i - 1].y;
+    L += Math.sqrt(dx * dx + dy * dy);
+  }
+  for (i = 0; i < ncPts.length; i++) {
+    if (ncPts[i].x < minX) minX = ncPts[i].x;
+    if (ncPts[i].x > maxX) maxX = ncPts[i].x;
+    if (ncPts[i].y < minY) minY = ncPts[i].y;
+    if (ncPts[i].y > maxY) maxY = ncPts[i].y;
+  }
+  var w = maxX - minX, h = maxY - minY;
+  var a = ncPts[0], b = ncPts[ncPts.length - 1];
+  var gap = Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
+  if (L < 100 || Math.min(w, h) < 24) return false;
+  if (gap > Math.max(42, 0.45 * Math.max(w, h))) return false;
+  var cx = 0, cy = 0;
+  for (i = 0; i < ncPts.length; i++) { cx += ncPts[i].x; cy += ncPts[i].y; }
+  ncCx = cx / ncPts.length; ncCy = cy / ncPts.length;
+  return true;
+}
+function ncSeek() {
+  var el = document.elementFromPoint(ncCx, ncCy);
+  var w = el && el.closest ? el.closest('[data-nw]') : null;
+  if (!w) { newsToast('圈里没有词语'); return; }
+  var idx = newsWords.indexOf(w);
+  if (idx < 0) { newsToast('圈里没有词语'); return; }
+  var t = newsWT[idx];
+  if (t === null || t === undefined) { newsToast('该词没有时间轴'); return; }
+  newsSuppressClick = true;
+  setTimeout(function () { newsSuppressClick = false; }, 400);
+  var wc = document.getElementById('newsWordCard');
+  if (wc) wc.style.display = 'none';
+  try { if (newsWordAudio) newsWordAudio.pause(); } catch (e) {}
+  try { if (navigator.vibrate) navigator.vibrate(15); } catch (e) {}
+  if (!newsAudio) newsStartAudio();
+  newsPaused = false;
+  newsWordWasPlaying = false;
+  document.getElementById('newsPlay').textContent = '⏸ 暂停';
+  document.getElementById('newsStop').style.display = '';
+  var pgEl = w.closest ? w.closest('.npage') : null;
+  var pg = pgEl ? (parseInt(pgEl.getAttribute('data-page'), 10) || 0) : 0;
+  if (pg !== newsPageCur) {
+    newsFlipTo(pg, t, true);
+  } else {
+    var applyT = function () { try { newsAudio.currentTime = Math.max(0, t - 0.05); } catch (e) {} };
+    if (newsAudio.readyState >= 1) applyT();
+    else newsAudio.addEventListener('loadedmetadata', applyT, { once: true });
+    newsAudio.play().catch(function () {});
+  }
+  newsClearHi();
+  newsHi(idx);
+  newsToast('▶ 从 “' + (w.textContent || '').trim() + '” 开始播放');
+}
+newsDetailBody.addEventListener('touchstart', function (e) {
+  if (e.touches.length === 1) ncBegin(e.touches[0].clientX, e.touches[0].clientY);
+  else { ncActive = false; if (ncPoly && ncPoly.parentNode) ncPoly.parentNode.removeChild(ncPoly); ncPoly = null; }
+}, { passive: true });
+newsDetailBody.addEventListener('touchmove', function (e) {
+  if (e.touches.length === 1) ncMove(e.touches[0].clientX, e.touches[0].clientY, e);
+}, { passive: false });
+newsDetailBody.addEventListener('touchend', function (e) {
+  if (e.changedTouches.length !== 1) return;
+  if (ncEnd()) { try { e.stopPropagation(); } catch (err) {} }
+}, { passive: true, capture: true });
+newsDetailBody.addEventListener('touchcancel', function () {
+  ncActive = false;
+  if (ncPoly && ncPoly.parentNode) ncPoly.parentNode.removeChild(ncPoly);
+  ncPoly = null;
+}, { passive: true });
+newsDetailBody.addEventListener('mousedown', function (e) {
+  if (e.button !== 0) return;
+  ncMouse = true;
+  ncBegin(e.clientX, e.clientY);
+});
+window.addEventListener('mousemove', function (e) { if (ncMouse) ncMove(e.clientX, e.clientY, null); });
+window.addEventListener('mouseup', function () { if (ncMouse) { ncMouse = false; ncEnd(); } });
+
 var newsWordAudio = null, newsWordWasPlaying = false, newsLastWord = '';
 document.getElementById('newsWordCard').addEventListener('click', function (e) {
   if (e.target && e.target.id === 'newsWordClose') return;
