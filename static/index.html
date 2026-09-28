@@ -943,6 +943,14 @@ document.addEventListener('keydown', function (e) {
   if (tn === 'input' || tn === 'textarea' || tn === 'select' || (t && t.isContentEditable)) return;
   if (newsTurn(e.key === 'ArrowRight' ? 1 : -1)) e.preventDefault();
 });
+// Esc 关释义卡（先关新闻内的词卡/短语卡，再关翻译页词卡）。
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Escape' && e.key !== 'Esc' && e.keyCode !== 27) return;
+  var c = document.getElementById('newsWordCard');
+  if (c && c.style.display !== 'none') { newsHideWordCard(); e.preventDefault(); return; }
+  var t = document.getElementById('trWordCard');
+  if (t && t.style.display !== 'none') { trHideWordCard(); e.preventDefault(); }
+});
 var newsTapCount = 0, newsTapTimer = null;
 newsDetailBody.addEventListener('click', function (e) {
   if (newsSuppressClick) return;
@@ -950,7 +958,7 @@ newsDetailBody.addEventListener('click', function (e) {
   var w = e.target && e.target.closest ? e.target.closest('[data-nw], [data-tw]') : null;
   newsTapCount++;
   if (newsTapCount === 1) {
-    if (w) newsLookupWord(w);
+    if (w) newsLookupWord(w); else newsHideWordCard();
     newsTapTimer = setTimeout(function () { newsTapTimer = null; newsTapCount = 0; }, 320);
   } else {
     if (newsTapTimer) { clearTimeout(newsTapTimer); newsTapTimer = null; }
@@ -1243,12 +1251,21 @@ document.getElementById('newsWordCard').addEventListener('click', function (e) {
   newsWordAudio = new Audio(newsApi('api/tts?text=' + encodeURIComponent(newsLastWord) + '&lang=en' + ttsRateParam()));
   newsWordAudio.play().catch(function () {});
 });
+function newsHideWordCard() {
+  var c = document.getElementById('newsWordCard');
+  if (c) c.style.display = 'none';
+  try { if (newsWordAudio) newsWordAudio.pause(); } catch (e) {}
+  // 查词时新闻朗读被暂停：关掉词卡就把它接回去，别让文章一直哑着。
+  if (newsWordWasPlaying && !newsPaused && newsAudio) {
+    newsWordWasPlaying = false;
+    newsAudio.play().catch(function () {});
+  }
+}
 function newsBindWordClose() {
   var cb = document.getElementById('newsWordClose');
   if (cb) cb.addEventListener('click', function (ev) {
     ev.stopPropagation();
-    var c = document.getElementById('newsWordCard');
-    if (c) c.style.display = 'none';
+    newsHideWordCard();
   });
 }
 function newsToast(msg) {
@@ -1294,7 +1311,7 @@ function newsLookupPhrase(phrase) {
   var card = document.getElementById('newsWordCard');
   if (card) {
     card.style.display = 'block';
-    card.innerHTML = '<div style="font-size:15px;font-weight:600;color:#1f2630;line-height:1.5">' + esc(phrase) + '</div><div style="font-size:12px;color:#5a6472;margin-top:4px">查询中…</div><button type="button" id="newsWordClose" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;cursor:pointer;color:#5a6472;line-height:1">×</button>';
+    card.innerHTML = '<div style="font-size:15px;font-weight:600;color:#1f2630;line-height:1.5">' + esc(phrase) + '</div><div style="font-size:12px;color:#5a6472;margin-top:4px">查询中…</div><button type="button" id="newsWordClose" style="position:absolute;top:3px;right:3px;border:none;background:#eef2f7;border-radius:8px;font-size:19px;line-height:1;cursor:pointer;color:#5a6472;padding:5px 9px;box-sizing:border-box;-webkit-tap-highlight-color:transparent;z-index:2" title="关闭">×</button>';
     newsBindWordClose();
   }
   var u = newsApi('api/translate?q=' + encodeURIComponent(phrase) + '&from=auto&to=');
@@ -1303,11 +1320,11 @@ function newsLookupPhrase(phrase) {
     .then(function (d) {
       if (!card) return;
       var tr = (d && d.translation) ? esc(d.translation) : '暂无译文';
-      card.innerHTML = '<div style="font-size:15px;font-weight:600;color:#1f2630;line-height:1.5">' + esc(phrase) + '</div><div style="font-size:13px;color:#1f2630;margin-top:4px;line-height:1.6">' + tr + '</div><button type="button" id="newsWordClose" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;cursor:pointer;color:#5a6472;line-height:1">×</button>';
+      card.innerHTML = '<div style="font-size:15px;font-weight:600;color:#1f2630;line-height:1.5">' + esc(phrase) + '</div><div style="font-size:13px;color:#1f2630;margin-top:4px;line-height:1.6">' + tr + '</div><button type="button" id="newsWordClose" style="position:absolute;top:3px;right:3px;border:none;background:#eef2f7;border-radius:8px;font-size:19px;line-height:1;cursor:pointer;color:#5a6472;padding:5px 9px;box-sizing:border-box;-webkit-tap-highlight-color:transparent;z-index:2" title="关闭">×</button>';
       newsBindWordClose();
     })
     .catch(function () {
-      if (card) card.innerHTML = '<div style="font-size:14px;color:#b02a37">查询失败</div>';
+      if (card) { card.innerHTML = '<div style="font-size:14px;color:#b02a37">查询失败</div>' + '<button type="button" id="newsWordClose" style="position:absolute;top:3px;right:3px;border:none;background:#eef2f7;border-radius:8px;font-size:19px;line-height:1;cursor:pointer;color:#5a6472;padding:5px 9px;box-sizing:border-box;-webkit-tap-highlight-color:transparent;z-index:2" title="关闭">×</button>'; newsBindWordClose(); }
     });
 }
 function newsLookupWord(span) {
@@ -1322,7 +1339,7 @@ function newsLookupWord(span) {
   var card = document.getElementById('newsWordCard');
   if (card) {
     card.style.display = 'block';
-    card.innerHTML = '<div style="font-size:16px;font-weight:600;color:#1f2630">' + esc(word) + '</div><div style="font-size:12px;color:#5a6472;margin-top:4px">查询中…</div><button type="button" id="newsWordClose" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;cursor:pointer;color:#5a6472;line-height:1">×</button>';
+    card.innerHTML = '<div style="font-size:16px;font-weight:600;color:#1f2630">' + esc(word) + '</div><div style="font-size:12px;color:#5a6472;margin-top:4px">查询中…</div><button type="button" id="newsWordClose" style="position:absolute;top:3px;right:3px;border:none;background:#eef2f7;border-radius:8px;font-size:19px;line-height:1;cursor:pointer;color:#5a6472;padding:5px 9px;box-sizing:border-box;-webkit-tap-highlight-color:transparent;z-index:2" title="关闭">×</button>';
     newsBindWordClose();
   }
   fetch(newsApi('api/dict?q=' + encodeURIComponent(word)))
@@ -1332,7 +1349,7 @@ function newsLookupWord(span) {
       if (d.full) {
         var phf = d.full.phonetic ? ' /' + esc(d.full.phonetic) + '/' : '';
         var trf = d.full.translation ? esc(d.full.translation) : '';
-        card.innerHTML = '<div style="font-size:16px;font-weight:600;color:#1f2630">' + esc(word) + phf + '</div><div style="font-size:13px;color:#1f2630;margin-top:4px;line-height:1.6">' + newsPosBadge(d.full) + trf + '</div><button type="button" id="newsWordClose" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;cursor:pointer;color:#5a6472;line-height:1">×</button>';
+        card.innerHTML = '<div style="font-size:16px;font-weight:600;color:#1f2630">' + esc(word) + phf + '</div><div style="font-size:13px;color:#1f2630;margin-top:4px;line-height:1.6">' + newsPosBadge(d.full) + trf + '</div><button type="button" id="newsWordClose" style="position:absolute;top:3px;right:3px;border:none;background:#eef2f7;border-radius:8px;font-size:19px;line-height:1;cursor:pointer;color:#5a6472;padding:5px 9px;box-sizing:border-box;-webkit-tap-highlight-color:transparent;z-index:2" title="关闭">×</button>';
         newsBindWordClose();
         return;
       }
@@ -1340,7 +1357,7 @@ function newsLookupWord(span) {
         fastShown = true;
         var ph2 = d.fast.phonetic ? ' /' + esc(d.fast.phonetic) + '/' : '';
         var defs2 = (d.fast.defs || []).slice(0, 1).map(function (x) { return '<div style="font-size:13px;color:#1f2630;margin-top:2px;line-height:1.5">' + newsFmtDefInner(x) + '</div>'; }).join('');
-        card.innerHTML = '<div style="font-size:16px;font-weight:600;color:#1f2630">' + esc(word) + ph2 + '</div>' + defs2 + '<button type="button" id="newsWordClose" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;cursor:pointer;color:#5a6472;line-height:1">×</button>';
+        card.innerHTML = '<div style="font-size:16px;font-weight:600;color:#1f2630">' + esc(word) + ph2 + '</div>' + defs2 + '<button type="button" id="newsWordClose" style="position:absolute;top:3px;right:3px;border:none;background:#eef2f7;border-radius:8px;font-size:19px;line-height:1;cursor:pointer;color:#5a6472;padding:5px 9px;box-sizing:border-box;-webkit-tap-highlight-color:transparent;z-index:2" title="关闭">×</button>';
         newsBindWordClose();
       }
     })
@@ -1351,16 +1368,16 @@ function newsLookupWord(span) {
     .then(function (d) {
       if (!card) return;
       if (!d || !d.translation) {
-        if (!fastShown && card) card.innerHTML = '<div style="font-size:14px;color:#b02a37">查询失败</div>';
+        if (!fastShown && card) { card.innerHTML = '<div style="font-size:14px;color:#b02a37">查询失败</div>' + '<button type="button" id="newsWordClose" style="position:absolute;top:3px;right:3px;border:none;background:#eef2f7;border-radius:8px;font-size:19px;line-height:1;cursor:pointer;color:#5a6472;padding:5px 9px;box-sizing:border-box;-webkit-tap-highlight-color:transparent;z-index:2" title="关闭">×</button>'; newsBindWordClose(); }
         return;
       }
       var ph = (d && d.phonetic) ? ' /' + esc(d.phonetic) + '/' : '';
       var tr = esc(d.translation);
-      card.innerHTML = '<div style="font-size:16px;font-weight:600;color:#1f2630">' + esc(word) + ph + '</div><div style="font-size:13px;color:#1f2630;margin-top:4px;line-height:1.6">' + newsPosBadge(d) + tr + '</div><button type="button" id="newsWordClose" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;cursor:pointer;color:#5a6472;line-height:1">×</button>';
+      card.innerHTML = '<div style="font-size:16px;font-weight:600;color:#1f2630">' + esc(word) + ph + '</div><div style="font-size:13px;color:#1f2630;margin-top:4px;line-height:1.6">' + newsPosBadge(d) + tr + '</div><button type="button" id="newsWordClose" style="position:absolute;top:3px;right:3px;border:none;background:#eef2f7;border-radius:8px;font-size:19px;line-height:1;cursor:pointer;color:#5a6472;padding:5px 9px;box-sizing:border-box;-webkit-tap-highlight-color:transparent;z-index:2" title="关闭">×</button>';
       newsBindWordClose();
     })
     .catch(function () {
-      if (card && !fastShown) card.innerHTML = '<div style="font-size:14px;color:#b02a37">查询失败</div>';
+      if (card && !fastShown) { card.innerHTML = '<div style="font-size:14px;color:#b02a37">查询失败</div>' + '<button type="button" id="newsWordClose" style="position:absolute;top:3px;right:3px;border:none;background:#eef2f7;border-radius:8px;font-size:19px;line-height:1;cursor:pointer;color:#5a6472;padding:5px 9px;box-sizing:border-box;-webkit-tap-highlight-color:transparent;z-index:2" title="关闭">×</button>'; newsBindWordClose(); }
     });
   try { if (newsWordAudio) { newsWordAudio.pause(); } } catch (e) {}
   newsWordAudio = new Audio(newsApi('api/tts?text=' + encodeURIComponent(word) + '&lang=en' + ttsRateParam()));
@@ -1912,12 +1929,16 @@ function trPlayWordAudio(word) {
   trWordAudio = new Audio(histPlayUrl(word, 'en'));
   trWordAudio.play().catch(function () {});
 }
+function trHideWordCard() {
+  var c = document.getElementById('trWordCard');
+  if (c) c.style.display = 'none';
+  try { if (trWordAudio) trWordAudio.pause(); } catch (e) {}
+}
 function trBindCardClose() {
   var cb = document.getElementById('trWordClose');
   if (cb) cb.addEventListener('click', function (ev) {
     ev.stopPropagation();
-    var c = document.getElementById('trWordCard');
-    if (c) c.style.display = 'none';
+    trHideWordCard();
   });
 }
 function trShowWordCard(word) {
@@ -1927,7 +1948,7 @@ function trShowWordCard(word) {
   if (!card) return;
   trWordLast = word;
   card.style.display = 'block';
-  card.innerHTML = '<div style="font-size:15px;font-weight:600;color:#1f2630">' + esc(word) + '</div><div style="font-size:12px;color:#5a6472;margin-top:4px">查询中…</div><button type="button" id="trWordClose" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;cursor:pointer;color:#5a6472;line-height:1">×</button>';
+  card.innerHTML = '<div style="font-size:15px;font-weight:600;color:#1f2630">' + esc(word) + '</div><div style="font-size:12px;color:#5a6472;margin-top:4px">查询中…</div><button type="button" id="trWordClose" style="position:absolute;top:3px;right:3px;border:none;background:#eef2f7;border-radius:8px;font-size:19px;line-height:1;cursor:pointer;color:#5a6472;padding:5px 9px;box-sizing:border-box;-webkit-tap-highlight-color:transparent;z-index:2" title="关闭">×</button>';
   trBindCardClose();
   trPlayWordAudio(word);
   fetch(newsApi('api/dict?q=' + encodeURIComponent(word)))
@@ -1945,13 +1966,21 @@ function trShowWordCard(word) {
       var defs = ((d.fast && d.fast.defs) || []).slice(0, 1);
       body += defs.map(function (x) { return '<div style="font-size:13px;color:#1f2630;margin-top:2px;line-height:1.5">' + newsFmtDefInner(x) + '</div>'; }).join('');
       if (!body) body = '<div style="font-size:13px;color:#5a6472;margin-top:4px">暂无释义</div>';
-      card.innerHTML = head + body + '<button type="button" id="trWordClose" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;cursor:pointer;color:#5a6472;line-height:1">×</button>';
+      card.innerHTML = head + body + '<button type="button" id="trWordClose" style="position:absolute;top:3px;right:3px;border:none;background:#eef2f7;border-radius:8px;font-size:19px;line-height:1;cursor:pointer;color:#5a6472;padding:5px 9px;box-sizing:border-box;-webkit-tap-highlight-color:transparent;z-index:2" title="关闭">×</button>';
       trBindCardClose();
     })
-    .catch(function () { if (card) card.innerHTML = '<div style="font-size:14px;color:#b02a37">查询失败</div>'; });
+    .catch(function () { if (card) { card.innerHTML = '<div style="font-size:14px;color:#b02a37">查询失败</div>' + '<button type="button" id="trWordClose" style="position:absolute;top:3px;right:3px;border:none;background:#eef2f7;border-radius:8px;font-size:19px;line-height:1;cursor:pointer;color:#5a6472;padding:5px 9px;box-sizing:border-box;-webkit-tap-highlight-color:transparent;z-index:2" title="关闭">×</button>'; trBindCardClose(); } });
 }
 document.getElementById('trWordCard').addEventListener('click', function () {
   if (trWordLast) trPlayWordAudio(trWordLast);
+});
+// 点卡片外面（点单词除外）也关掉词卡。
+document.addEventListener('click', function (e) {
+  var c = document.getElementById('trWordCard');
+  if (!c || c.style.display === 'none') return;
+  var t = e.target;
+  if (t && t.closest && (t.closest('#trWordCard') || t.closest('[data-tw]'))) return;
+  trHideWordCard();
 });
 var trSwiped = false, trTouchX = 0, trTouchY = 0;
 resultEl.addEventListener('touchstart', function (e) {
