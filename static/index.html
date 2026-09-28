@@ -1244,12 +1244,24 @@ window.addEventListener('mousemove', function (e) { if (ncMouse) ncMove(e.client
 window.addEventListener('mouseup', function () { if (ncMouse) { ncMouse = false; ncEnd(); } });
 
 var newsWordAudio = null, newsWordWasPlaying = false, newsLastWord = '';
+var newsCardTapTimer = null;
 document.getElementById('newsWordCard').addEventListener('click', function (e) {
   if (e.target && e.target.id === 'newsWordClose') return;
   if (!newsLastWord) return;
-  try { if (newsWordAudio) { newsWordAudio.pause(); } } catch (err) {}
-  newsWordAudio = new Audio(newsApi('api/tts?text=' + encodeURIComponent(newsLastWord) + '&lang=en' + ttsRateParam()));
-  newsWordAudio.play().catch(function () {});
+  // 单击 = 再读一遍。延后 260ms 执行，这样双击才能把它取消掉（跟 movieList 同一套路）。
+  if (newsCardTapTimer) { clearTimeout(newsCardTapTimer); newsCardTapTimer = null; return; }
+  newsCardTapTimer = setTimeout(function () {
+    newsCardTapTimer = null;
+    try { if (newsWordAudio) { newsWordAudio.pause(); } } catch (err) {}
+    newsWordAudio = new Audio(newsApi('api/tts?text=' + encodeURIComponent(newsLastWord) + '&lang=en' + ttsRateParam()));
+    newsWordAudio.play().catch(function () {});
+  }, 260);
+});
+// 双击卡片内容 = 关闭词卡（不读词、不动时间轴）
+document.getElementById('newsWordCard').addEventListener('dblclick', function (e) {
+  if (e.target && e.target.id === 'newsWordClose') return;
+  if (newsCardTapTimer) { clearTimeout(newsCardTapTimer); newsCardTapTimer = null; }
+  newsHideWordCard();
 });
 function newsHideWordCard() {
   var c = document.getElementById('newsWordCard');
@@ -1971,8 +1983,16 @@ function trShowWordCard(word) {
     })
     .catch(function () { if (card) { card.innerHTML = '<div style="font-size:14px;color:#b02a37">查询失败</div>' + '<button type="button" id="trWordClose" style="position:absolute;top:3px;right:3px;border:none;background:#eef2f7;border-radius:8px;font-size:19px;line-height:1;cursor:pointer;color:#5a6472;padding:5px 9px;box-sizing:border-box;-webkit-tap-highlight-color:transparent;z-index:2" title="关闭">×</button>'; trBindCardClose(); } });
 }
+var trCardTapTimer = null;
 document.getElementById('trWordCard').addEventListener('click', function () {
-  if (trWordLast) trPlayWordAudio(trWordLast);
+  if (!trWordLast) return;
+  if (trCardTapTimer) { clearTimeout(trCardTapTimer); trCardTapTimer = null; return; }
+  trCardTapTimer = setTimeout(function () { trCardTapTimer = null; trPlayWordAudio(trWordLast); }, 260);
+});
+// 双击卡片内容 = 关闭词卡
+document.getElementById('trWordCard').addEventListener('dblclick', function () {
+  if (trCardTapTimer) { clearTimeout(trCardTapTimer); trCardTapTimer = null; }
+  trHideWordCard();
 });
 // 点卡片外面（点单词除外）也关掉词卡。
 document.addEventListener('click', function (e) {
