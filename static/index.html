@@ -1267,9 +1267,11 @@ function newsHideWordCard() {
   var c = document.getElementById('newsWordCard');
   if (c) c.style.display = 'none';
   try { if (newsWordAudio) newsWordAudio.pause(); } catch (e) {}
-  // 查词时新闻朗读被暂停：关掉词卡就把它接回去，别让文章一直哑着。
+  // 查词时新闻朗读被暂停：释义卡关闭后从这里继续播报。
+  // 只有"查词前本来就在播、且期间没被用户手动暂停"才自动续播。
   if (newsWordWasPlaying && !newsPaused && newsAudio) {
     newsWordWasPlaying = false;
+    document.getElementById('newsPlay').textContent = '⏸ 暂停';
     newsAudio.play().catch(function () {});
   }
 }
@@ -1393,12 +1395,7 @@ function newsLookupWord(span) {
     });
   try { if (newsWordAudio) { newsWordAudio.pause(); } } catch (e) {}
   newsWordAudio = new Audio(newsApi('api/tts?text=' + encodeURIComponent(word) + '&lang=en' + ttsRateParam()));
-  newsWordAudio.onended = function () {
-    if (newsWordWasPlaying && !newsPaused && newsAudio) {
-      newsWordWasPlaying = false;
-      newsAudio.play().catch(function () {});
-    }
-  };
+  // 查词期间新闻朗读保持暂停（不在这里 onended 接回），等释义卡关闭时才继续。
   newsWordAudio.play().catch(function () {});
 }
 document.getElementById('newsSearch').addEventListener('input', function () {
