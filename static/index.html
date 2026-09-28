@@ -639,6 +639,25 @@ function ensureNewsPage(el) {
   var pg = parseInt(pgEl.getAttribute('data-page'), 10) || 0;
   if (pg !== newsPageCur) newsFlipTo(pg, null, false);
 }
+function newsTurn(dir) {
+  // dir = +1 下一页 / -1 上一页。手机滑动和电脑左右方向键共用这一条路。
+  var body = document.getElementById('newsDetailBody');
+  var pages = body ? body.querySelectorAll('.npage') : [];
+  var target = newsPageCur + (dir > 0 ? 1 : -1);
+  if (target < 0) {                     // 第一页再往前 = 退出详情回列表（同手机右滑）
+    newsStopPlay();
+    newsShowList();
+    return true;
+  }
+  if (target >= pages.length) return false;   // 最后一页不越界
+  if (newsPlaying && !newsPaused) {           // 翻页先暂停，同手机滑动行为
+    newsPaused = true;
+    if (newsAudio) { try { newsAudio.pause(); } catch (err) {} }
+    document.getElementById('newsPlay').textContent = '▶ 继续';
+  }
+  newsFlipTo(target, null);
+  return true;
+}
 function newsHardSwitch(pg) {
   var body = document.getElementById('newsDetailBody');
   var pages = body ? body.querySelectorAll('.npage') : [];
@@ -914,6 +933,16 @@ newsOverlay.addEventListener('click', function (e) {
   }
 });
 document.getElementById('newsBack').addEventListener('click', function () { newsShowList(); });
+// 电脑（浏览器 / Windows 客户端）：左右方向键翻页。只在新闻详情页开着时生效，
+// 焦点在输入框里不抢键。→ 下一页、← 上一页；第一页再按 ← 退回列表（同手机右滑）。
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+  if (newsOverlay.style.display === 'none' || newsDetailView.style.display === 'none') return;
+  var t = e.target, tn = t && t.tagName ? String(t.tagName).toLowerCase() : '';
+  if (tn === 'input' || tn === 'textarea' || tn === 'select' || (t && t.isContentEditable)) return;
+  if (newsTurn(e.key === 'ArrowRight' ? 1 : -1)) e.preventDefault();
+});
 var newsTapCount = 0, newsTapTimer = null;
 newsDetailBody.addEventListener('click', function (e) {
   if (newsSuppressClick) return;
@@ -1051,21 +1080,7 @@ newsDetailBody.addEventListener('touchend', function (e) {
   var dx = e.changedTouches[0].clientX - newsTouchX;
   var dy = e.changedTouches[0].clientY - newsTouchY;
   if (Math.abs(dx) <= 50 || Math.abs(dx) <= Math.abs(dy) * 1.5) return;
-  var dir = dx < 0 ? 1 : -1;
-  var target = newsPageCur + dir;
-  var pages = newsDetailBody.querySelectorAll('.npage');
-  if (target < 0) {
-    newsStopPlay();
-    newsShowList();
-    return;
-  }
-  if (target >= pages.length) return;
-  if (newsPlaying && !newsPaused) {
-    newsPaused = true;
-    if (newsAudio) { try { newsAudio.pause(); } catch (err) {} }
-    document.getElementById('newsPlay').textContent = '▶ 继续';
-  }
-  newsFlipTo(target, null);
+  newsTurn(dx < 0 ? 1 : -1);
 }, { passive: true });
 newsDetailBody.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 newsDetailBody.addEventListener('touchcancel', function () {
