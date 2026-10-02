@@ -513,7 +513,7 @@ def api_city_guide():
         abort(400)
     import city_guide
     resp = jsonify(city_guide.get_guide(city))
-    resp.headers["Cache-Control"] = "public, max-age=3600"
+    resp.headers["Cache-Control"] = "public, max-age=600"
     # App 页面是 file:// 加载，origin 为 null，必须放行 CORS
     resp.headers["Access-Control-Allow-Origin"] = "*"
     return resp
