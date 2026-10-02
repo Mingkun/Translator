@@ -252,9 +252,13 @@ def coords(city: str):
     return None
 
 
+# 缓存版本：解析/提示词逻辑一变就升级，旧缓存自动失效
+GUIDE_CACHE_VERSION = "v2"
+
+
 def _cache_path(city: str) -> Path:
     h = hashlib.sha1(city.encode("utf-8")).hexdigest()[:16]
-    return CACHE_DIR / f"{h}.json"
+    return CACHE_DIR / f"{GUIDE_CACHE_VERSION}-{h}.json"
 
 
 def _read_cache(city: str):
@@ -340,7 +344,7 @@ LLM_SYSTEM = (
 )
 
 
-def _llm_json(system: str, user: str, max_tokens: int = 3200):
+def _llm_json(system: str, user: str, max_tokens: int = 8192):
     """调大模型并返回解析后的 JSON。DeepSeek 主 → zai GLM 备。失败返回 None。
 
     总预算 36 秒（gunicorn 工作进程 60 秒超时，App 取数也有限时）。
@@ -415,8 +419,7 @@ def _pairs(v, limit: int):
     return out
 
 
-def _llm_guide(city: str, raw: dict):
-    """把抓取到的零散素材交给大模型整合成结构化攻略。"""
+def _build_guide_prompt(city: str, raw: dict, limit: int = 12) -> str:
     lines = []
     if raw.get("summary"):
         lines.append("【简介】" + raw["summary"][:300])
@@ -424,12 +427,11 @@ def _llm_guide(city: str, raw: dict):
                        ("streets", "街区购物"), ("arrive", "抵达交通"), ("tips", "实用信息")):
         items = raw.get(key) or []
         if items:
-            txt = "；".join((i[0] + ("—" + i[1] if len(i) > 1 and i[1] else "")) for i in items[:12])
-            lines.append(f"【{label}】{txt[:900]}")
+            txt = "；".join((i[0] + ("—" + i[1] if len(i) > 1 and i[1] else "")) for i in items[:limit])
+            lines.append(f"【{label}】{txt[:800]}")
     if not lines:
         lines.append("（无外部素材）")
-
-    user = (
+    return (
         f"请为「{city}」整理一份旅行攻略，输出 JSON，字段固定为：\n"
         '{"summary":"60-120字城市概览",'
         '"foods":[["菜名","一句话说明"]],"spots":[["景点名","一句话说明"]],'
@@ -441,7 +443,24 @@ def _llm_guide(city: str, raw: dict):
         "不要编造不存在的地点；每条说明不超过 40 字；全部简体中文。\n\n"
         f"素材如下：\n" + "\n".join(lines)
     )
-    j = _llm_json(LLM_SYSTEM, user)
+
+
+def _llm_guide(city: str, raw: dict):
+    """把抓取到的零散素材交给大模型整合成结构化攻略。
+
+    deepseek-flash 是推理模型：推理过程会占掉大量 token（实测 5-6k），
+    max_tokens 给小了会得到 finish_reason=length、content 为空 → 必须给足 8192。
+    首次失败时用更精简的素材再试一次。
+    """
+    for limit, mt in ((12, 8192), (6, 8192)):
+        j = _llm_json(LLM_SYSTEM, _build_guide_prompt(city, raw, limit), max_tokens=mt)
+        out = _normalize_guide(j)
+        if out:
+            return out
+    return None
+
+
+def _normalize_guide(j):
     if not isinstance(j, dict):
         return None
     out = {
@@ -506,7 +525,7 @@ def _llm_trip(frm: str, to: str, base: dict):
         "要求：modes 给 2-3 条（从高铁/飞机/自驾中选合适的）；plan 给 4 条，环节依次为「订票」「出发当天」「途中」「到达后」；"
         "tips 给 3 条。每条说明 30 字以内，简体中文；只写常识性建议，不要编造具体车次或票价数字。"
     )
-    j = _llm_json(LLM_SYSTEM, user, max_tokens=1800)
+    j = _llm_json(LLM_SYSTEM, user, max_tokens=6000)
     if not isinstance(j, dict):
         return None
     out = {
