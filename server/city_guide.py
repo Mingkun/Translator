@@ -233,8 +233,38 @@ def _wikipedia_summary(city: str) -> str:
     return ""
 
 
-def coords(city: str):
-    """城市坐标：Wikivoyage → Wikipedia。"""
+COORDS_CACHE_FILE = DATA_DIR / "coords_cache.json"
+
+# 常用旅游城市的内置坐标（Wiki 偶发失败时的兜底，精度足够估算距离）
+_BUILTIN_COORDS = {
+    "武夷山": (27.76, 118.03), "张家界": (29.13, 110.48),
+    "香格里拉": (27.83, 99.70), "敦煌": (40.14, 94.66),
+    "平遥": (37.20, 112.18), "凤凰": (27.95, 109.60),
+    "九寨沟": (33.26, 104.24), "婺源": (29.25, 117.86),
+    "稻城": (29.04, 100.30), "恩施": (30.27, 109.49),
+    "荔波": (25.41, 107.88), "阿勒泰": (47.84, 88.14),
+}
+
+_COORDS_MEMO: dict = {}
+
+
+def _coords_disk() -> dict:
+    try:
+        return json.loads(COORDS_CACHE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _coords_disk_save(city: str, v):
+    try:
+        d = _coords_disk()
+        d[city] = [round(v[0], 4), round(v[1], 4)]
+        COORDS_CACHE_FILE.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _coords_from_wiki(city: str):
     for host in ("zh.wikivoyage.org", "zh.wikipedia.org"):
         for name in (city, f"{city}市"):
             q = urllib.parse.urlencode({
@@ -249,6 +279,29 @@ def coords(city: str):
             if pages and pages[0].get("coordinates"):
                 c = pages[0]["coordinates"][0]
                 return float(c["lat"]), float(c["lon"])
+    return None
+
+
+def coords(city: str):
+    """城市坐标：内存 → 磁盘缓存 → 内置表 → Wikivoyage/Wikipedia（成功写盘）。"""
+    key = (city or "").strip()
+    if not key:
+        return None
+    if key in _COORDS_MEMO:
+        return _COORDS_MEMO[key]
+    hit = _coords_disk().get(key)
+    if isinstance(hit, list) and len(hit) == 2:
+        _COORDS_MEMO[key] = (float(hit[0]), float(hit[1]))
+        return _COORDS_MEMO[key]
+    bare = key[:-1] if key.endswith("市") else key
+    if bare in _BUILTIN_COORDS:
+        _COORDS_MEMO[key] = _BUILTIN_COORDS[bare]
+        return _BUILTIN_COORDS[bare]
+    r = _coords_from_wiki(key)
+    if r:
+        _COORDS_MEMO[key] = r
+        _coords_disk_save(key, r)
+        return r
     return None
 
 
@@ -495,7 +548,7 @@ STATION_CACHE = DATA_DIR / "station_names.js"
 TRIP_CACHE_DIR = DATA_DIR / "trip_cache"
 TRIP_TTL = 7 * 24 * 3600
 # 行程提示词一变就升级版本，旧缓存自动失效
-TRIP_CACHE_VERSION = "v2"
+TRIP_CACHE_VERSION = "v3"
 
 
 def _trip_key(frm: str, to: str) -> str:
@@ -673,7 +726,7 @@ def get_trip(frm: str, to: str) -> dict:
         if res["fromStations"] and res["toStations"]:
             res["advice"] += f"　车站参考：{res['fromStations'][0]['name']} → {res['toStations'][0]['name']}。"
     else:
-        res["advice"] = "未取到两地坐标，无法估算距离；可参考两地火车站名称规划。"
+        res["advice"] = "距离估算暂不可用，时长与车次请以下方大模型整理为准。"
 
     # 大模型把事实数据整合成可执行方案
     try:
@@ -692,12 +745,20 @@ def get_trip(frm: str, to: str) -> dict:
             res["aiModes"] = ai["modes"]
         if ai.get("trains"):
             res["trains"] = ai["trains"]
-        # 用模型的真实判断纠正按距离估算的时长
+        # 用模型的真实判断纠正按距离估算的时长；坐标缺失时补一张高铁卡
         if ai.get("hsrHours"):
-            for m in res.get("modes", []):
-                if m.get("mode") == "高铁":
-                    m["hoursText"] = ai["hsrHours"] + "（大模型判断）"
-                    m["estimated"] = False
+            hsr = next((m for m in res.get("modes", []) if m.get("mode") == "高铁"), None)
+            if hsr:
+                hsr["hoursText"] = ai["hsrHours"] + "（大模型判断）"
+                hsr["estimated"] = False
+            else:
+                res.setdefault("modes", []).insert(0, {
+                    "mode": "高铁", "hours": None,
+                    "hoursText": ai["hsrHours"] + "（大模型判断）",
+                    "priceText": "票价以 12306 实时查询为准",
+                    "note": "未取到两地坐标，时长为大模型判断",
+                    "estimated": False,
+                })
             res["hsrHours"] = ai["hsrHours"]
 
     _trip_cache_write(frm, to, res)
