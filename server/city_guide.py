@@ -253,7 +253,7 @@ def coords(city: str):
 
 
 # 缓存版本：解析/提示词逻辑一变就升级，旧缓存自动失效
-GUIDE_CACHE_VERSION = "v2"
+GUIDE_CACHE_VERSION = "v3"
 
 
 def _cache_path(city: str) -> Path:
@@ -298,7 +298,7 @@ def get_guide(city: str, refresh: bool = False) -> dict:
 
     data = {"ok": False, "city": city, "source": "wikivoyage", "cached": False,
             "summary": "", "foods": [], "spots": [], "hotels": [],
-            "streets": [], "arrive": [], "tips": []}
+            "streets": [], "arrive": [], "tips": [], "stations": [], "nearby": []}
 
     if got:
         title, buckets = got
@@ -323,7 +323,7 @@ def get_guide(city: str, refresh: bool = False) -> dict:
         ai = None
     if ai:
         data["summary"] = ai["summary"] or data["summary"]
-        for k in ("foods", "spots", "hotels", "streets", "arrive", "tips"):
+        for k in ("foods", "spots", "hotels", "streets", "arrive", "tips", "stations", "nearby"):
             if ai.get(k):
                 data[k] = ai[k]
         data["ok"] = True
@@ -438,15 +438,19 @@ def _build_guide_prompt(city: str, raw: dict, limit: int = 12) -> str:
     if not lines:
         lines.append("（无外部素材）")
     return (
-        f"请为「{city}」整理一份旅行攻略，输出 JSON，字段固定为：\n"
+        f"请为「{city}」整理一份完整的城市旅行档案，一次覆盖「美食/景点/酒店/出行/概览」各页所需。"
+        "输出 JSON，字段固定为：\n"
         '{"summary":"60-120字城市概览",'
         '"foods":[["菜名","一句话说明"]],"spots":[["景点名","一句话说明"]],'
         '"hotels":[["住宿区域或代表性酒店","一句话说明"]],'
         '"streets":[["街区/商圈","一句话说明"]],'
-        '"arrive":[["交通方式","说明"]],"tips":[["要点","说明"]]}\n'
-        "数量：foods 5-8、spots 6-10、hotels 3-5、streets 2-4、arrive 2-4、tips 3-5。\n"
-        "要求：基于素材整理，剔除机场/车站/政务机构等非游玩项；素材不足时用你确知的地道内容补齐；"
-        "不要编造不存在的地点；每条说明不超过 40 字；全部简体中文。\n\n"
+        '"arrive":[["交通方式","说明"]],"tips":[["要点","说明"]],'
+        '"stations":[["火车站名","属于哪条线路/方向"]],'
+        '"nearby":[["周边目的地","距离与看点"]]}\n'
+        "数量：foods 5-8、spots 6-10、hotels 3-5、streets 2-4、arrive 2-4、tips 3-5、"
+        "stations 2-5（本地主要高铁站/火车站）、nearby 3-5（周边可一日往返的目的地）。\n"
+        "要求：基于素材整理，剔除机场/车站/政务机构等非游玩项（stations 字段例外，那里就是要写车站）；"
+        "素材不足时用你确知的地道内容补齐；不要编造不存在的地点；每条说明不超过 40 字；全部简体中文。\n\n"
         f"素材如下：\n" + "\n".join(lines)
     )
 
@@ -477,6 +481,8 @@ def _normalize_guide(j):
         "streets": _pairs(j.get("streets"), 5),
         "arrive": _pairs(j.get("arrive"), 5),
         "tips": _pairs(j.get("tips"), 5),
+        "stations": _pairs(j.get("stations"), 6),
+        "nearby": _pairs(j.get("nearby"), 6),
     }
     if not any(out[k] for k in ("foods", "spots", "hotels")):
         return None
@@ -515,19 +521,33 @@ def _trip_cache_write(frm: str, to: str, data: dict):
         pass
 
 
-def _llm_trip(frm: str, to: str, base: dict):
+def _llm_trip(frm: str, to: str, base: dict, d1: dict | None = None, d2: dict | None = None):
     """让大模型给出这条线路的真实车次与运行时长，并整合成可执行方案。
 
     距离/票价区间仍由服务端算（可复核），车次与时长用模型知识（非实时）。
+    两个城市的档案（若已缓存）一并作为上下文，避免重复获取信息。
     """
-    facts = []
-    if base.get("distance"):
-        facts.append(f"直线推算陆路距离约 {base['distance']} 公里")
     fs = "、".join(s["name"] for s in (base.get("fromStations") or [])[:4]) or "未知"
     ts = "、".join(s["name"] for s in (base.get("toStations") or [])[:4]) or "未知"
+
+    def dossier(tag: str, d):
+        """把已缓存的城市档案压成几行上下文。"""
+        if not d:
+            return ""
+        bits = []
+        if d.get("summary"):
+            bits.append("概览：" + d["summary"][:120])
+        if d.get("stations"):
+            bits.append("车站：" + "；".join(f"{x[0]}({x[1]})" for x in d["stations"][:4]))
+        if d.get("arrive"):
+            bits.append("交通：" + "；".join(f"{x[0]}—{x[1]}" for x in d["arrive"][:3]))
+        return f"【{tag}已归档信息】" + " | ".join(bits) + "\n" if bits else ""
+
+    ctx = dossier(frm, d1) + dossier(to, d2)
     user = (
         f"请给出「{frm} → {to}」的真实出行信息。参考：{frm}车站有 {fs}；{to}车站有 {ts}。\n"
-        '输出 JSON：{"summary":"一句话总体建议",'
+        + (ctx + "（以上已归档信息可供参考，不必重复罗列）\n" if ctx else "")
+        + '输出 JSON：{"summary":"一句话总体建议",'
         '"hsrHours":"高铁实际约几小时（含中转，如 6-7 小时）",'
         '"trains":[["车次或方案","区间/时长/说明"]],'
         '"modes":[["交通方式","什么时候选它、要注意什么"]],'
@@ -608,10 +628,17 @@ def get_trip(frm: str, to: str) -> dict:
         return hit
 
     ca, cb = coords(frm), coords(to)
+
+    # 复用已缓存的「城市档案」（命中时不额外消耗生成，也不重复取车站信息）
+    d1, d2 = _read_cache(frm), _read_cache(to)
+    frm_st = [{"name": x[0]} for x in (d1 or {}).get("stations", [])] if d1 else []
+    to_st = [{"name": x[0]} for x in (d2 or {}).get("stations", [])] if d2 else []
+
     res = {"ok": True, "from": frm, "to": to,
-           "fromStations": city_stations(frm), "toStations": city_stations(to),
+           "fromStations": frm_st or city_stations(frm),
+           "toStations": to_st or city_stations(to),
            "distance": None, "modes": [], "advice": "",
-           "ai": False, "summary": "", "plan": [], "tips": []}
+           "ai": False, "summary": "", "plan": [], "tips": [], "trains": []}
     if ca and cb:
         km = _haversine(ca, cb) * 1.22  # 陆路里程约为直线 1.2 倍
         res["distance"] = round(km)
@@ -650,7 +677,7 @@ def get_trip(frm: str, to: str) -> dict:
 
     # 大模型把事实数据整合成可执行方案
     try:
-        ai = _llm_trip(frm, to, res)
+        ai = _llm_trip(frm, to, res, d1, d2)
     except Exception:
         ai = None
     if ai:
