@@ -505,6 +505,20 @@ def downloads(name: str):
     return Response(path.read_bytes(), mimetype=mime)
 
 
+@app.get("/api/city-guide")
+def api_city_guide():
+    """按需获取任意城市的攻略（本地库未命中时由 App 调用）。"""
+    city = (request.args.get("city") or "").strip()[:32]
+    if not city:
+        abort(400)
+    import city_guide
+    resp = jsonify(city_guide.get_guide(city))
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    # App 页面是 file:// 加载，origin 为 null，必须放行 CORS
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
+
+
 @app.get("/api/tts")
 def api_tts():
     if not _authorized():
