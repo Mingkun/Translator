@@ -461,6 +461,63 @@ def _llm_guide(city: str, raw: dict):
 # ==================== 行程规划 ====================
 
 STATION_CACHE = DATA_DIR / "station_names.js"
+TRIP_CACHE_DIR = DATA_DIR / "trip_cache"
+TRIP_TTL = 7 * 24 * 3600
+
+
+def _trip_key(frm: str, to: str) -> str:
+    return hashlib.sha1((frm + "|" + to).encode("utf-8")).hexdigest()[:16]
+
+
+def _trip_cache_read(frm: str, to: str):
+    p = TRIP_CACHE_DIR / f"{_trip_key(frm, to)}.json"
+    try:
+        if p.is_file() and (time.time() - p.stat().st_mtime) < TRIP_TTL:
+            return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return None
+
+
+def _trip_cache_write(frm: str, to: str, data: dict):
+    try:
+        TRIP_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        (TRIP_CACHE_DIR / f"{_trip_key(frm, to)}.json").write_text(
+            json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _llm_trip(frm: str, to: str, base: dict):
+    """把已算好的事实数据交给大模型，整合成可执行的出行方案。"""
+    facts = []
+    if base.get("distance"):
+        facts.append(f"陆路距离约 {base['distance']} 公里")
+    for m in base.get("modes", []):
+        facts.append(f"{m['mode']}：{m['hoursText']}，{m['priceText']}")
+    fs = "、".join(s["name"] for s in (base.get("fromStations") or [])[:3]) or "未知"
+    ts = "、".join(s["name"] for s in (base.get("toStations") or [])[:3]) or "未知"
+    user = (
+        f"为「{frm} → {to}」整理一份出行方案。已算出的事实数据：\n"
+        + "；".join(facts) + f"\n{frm}主要车站：{fs}；{to}主要车站：{ts}\n\n"
+        '请输出 JSON：{"summary":"一句话总体建议",'
+        '"modes":[["交通方式","什么时候选它、要注意什么"]],'
+        '"plan":[["环节","具体做法"]],"tips":[["要点","说明"]]}\n'
+        "要求：modes 给 2-3 条（从高铁/飞机/自驾中选合适的）；plan 给 4 条，环节依次为「订票」「出发当天」「途中」「到达后」；"
+        "tips 给 3 条。每条说明 30 字以内，简体中文；只写常识性建议，不要编造具体车次或票价数字。"
+    )
+    j = _llm_json(LLM_SYSTEM, user, max_tokens=1800)
+    if not isinstance(j, dict):
+        return None
+    out = {
+        "summary": _clean(str(j.get("summary") or ""))[:120],
+        "modes": _pairs(j.get("modes"), 4),
+        "plan": _pairs(j.get("plan"), 6),
+        "tips": _pairs(j.get("tips"), 5),
+    }
+    if not (out["plan"] or out["tips"] or out["summary"]):
+        return None
+    return out
 
 
 def _station_table():
@@ -509,45 +566,69 @@ def get_trip(frm: str, to: str) -> dict:
     if not frm or not to:
         return {"ok": False, "reason": "missing-city"}
 
+    hit = _trip_cache_read(frm, to)
+    if hit:
+        hit["cached"] = True
+        return hit
+
     ca, cb = coords(frm), coords(to)
     res = {"ok": True, "from": frm, "to": to,
            "fromStations": city_stations(frm), "toStations": city_stations(to),
-           "distance": None, "modes": [], "advice": ""}
-    if not ca or not cb:
-        res["advice"] = "未取到两地坐标，无法估算距离；可参考两地火车站的直达车次（站名已列出）。"
-        return res
+           "distance": None, "modes": [], "advice": "",
+           "ai": False, "summary": "", "plan": [], "tips": []}
+    if ca and cb:
+        km = _haversine(ca, cb) * 1.22  # 陆路里程约为直线 1.2 倍
+        res["distance"] = round(km)
 
-    km = _haversine(ca, cb) * 1.22  # 陆路里程约为直线 1.2 倍
-    res["distance"] = round(km)
+        # 高铁：有效均速约 230km/h（含停站），二等座约 0.46 元/km
+        hh = km / 230.0
+        hsr_h = int(hh) + 1
+        hsr_price = max(30, round(km * 0.46 / 5) * 5)
+        res["modes"].append({
+            "mode": "高铁", "hours": round(hh, 1), "hoursText": f"约 {hsr_h} 小时",
+            "priceText": f"二等座约 {hsr_price} 元",
+            "note": "含安检进站约需再留 30 分钟",
+        })
 
-    # 高铁：有效均速约 230km/h（含停站），二等座约 0.46 元/km
-    hh = km / 230.0
-    hsr_h = int(hh) + 1  # 取整到小时
-    hsr_price = max(30, round(km * 0.46 / 5) * 5)
-    res["modes"].append({
-        "mode": "高铁", "hours": round(hh, 1), "hoursText": f"约 {hsr_h} 小时",
-        "priceText": f"二等座约 {hsr_price} 元",
-        "note": "含安检进站约需再留 30 分钟",
-    })
+        # 飞机：巡航 750km/h + 前后各约 1 小时地面流程
+        ff = km / 750.0 + 2.0
+        fprice_lo = max(300, round(km * 0.55 / 50) * 50)
+        fprice_hi = max(600, round(km * 1.05 / 50) * 50)
+        res["modes"].append({
+            "mode": "飞机", "hours": round(ff, 1),
+            "hoursText": f"约 {int(ff) + 1} 小时（含机场流程）",
+            "priceText": f"约 {fprice_lo}~{fprice_hi} 元",
+            "note": "建议提前 3~6 周订票，周二/周三出发通常更低",
+        })
 
-    # 飞机：巡航 750km/h + 前后各约 1 小时地面流程
-    ff = km / 750.0 + 2.0
-    fprice_lo = max(300, round(km * 0.55 / 50) * 50)
-    fprice_hi = max(600, round(km * 1.05 / 50) * 50)
-    res["modes"].append({
-        "mode": "飞机", "hours": round(ff, 1), "hoursText": f"约 {int(ff) + 1} 小时（含机场流程）",
-        "priceText": f"约 {fprice_lo}~{fprice_hi} 元",
-        "note": "建议提前 3~6 周订票，周二/周三出发通常更低",
-    })
-
-    if km < 700:
-        res["advice"] = f"两地约 {round(km)} 公里，高铁更省心（门到门通常比飞机快），推荐高铁。"
-    elif km < 1500:
-        res["advice"] = f"两地约 {round(km)} 公里，高铁与飞机时间接近；赶时间选飞机、图省心选高铁。"
+        if km < 700:
+            res["advice"] = f"两地约 {round(km)} 公里，高铁更省心（门到门通常比飞机快），推荐高铁。"
+        elif km < 1500:
+            res["advice"] = f"两地约 {round(km)} 公里，高铁与飞机时间接近；赶时间选飞机、图省心选高铁。"
+        else:
+            res["advice"] = f"两地约 {round(km)} 公里，路途较远，推荐飞机；若沿途游玩可考虑分段高铁。"
+        if res["fromStations"] and res["toStations"]:
+            res["advice"] += f"　车站参考：{res['fromStations'][0]['name']} → {res['toStations'][0]['name']}。"
     else:
-        res["advice"] = f"两地约 {round(km)} 公里，路途较远，推荐飞机；若沿途游玩可考虑分段高铁。"
-    if res["fromStations"] and res["toStations"]:
-        res["advice"] += f"　车站参考：{res['fromStations'][0]['name']} → {res['toStations'][0]['name']}。"
+        res["advice"] = "未取到两地坐标，无法估算距离；可参考两地火车站名称规划。"
+
+    # 大模型把事实数据整合成可执行方案
+    try:
+        ai = _llm_trip(frm, to, res)
+    except Exception:
+        ai = None
+    if ai:
+        res["ai"] = True
+        if ai.get("summary"):
+            res["summary"] = ai["summary"]
+        if ai.get("plan"):
+            res["plan"] = ai["plan"]
+        if ai.get("tips"):
+            res["tips"] = ai["tips"]
+        if ai.get("modes"):
+            res["aiModes"] = ai["modes"]
+
+    _trip_cache_write(frm, to, res)
     return res
 
 
