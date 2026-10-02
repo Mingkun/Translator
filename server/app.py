@@ -519,6 +519,24 @@ def api_city_guide():
     return resp
 
 
+@app.get("/api/trip")
+def api_trip():
+    """行程估算：距离 / 高铁与飞机时长票价区间 / 推荐方式 / 两地火车站。"""
+    frm = (request.args.get("from") or "").strip()[:24]
+    to = (request.args.get("to") or "").strip()[:24]
+    if not frm or not to:
+        abort(400)
+    import city_guide
+    try:
+        data = city_guide.get_trip(frm, to)
+    except Exception:
+        data = {"ok": False, "reason": "upstream-error", "from": frm, "to": to}
+    resp = jsonify(data)
+    resp.headers["Cache-Control"] = "public, max-age=1800"
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
+
+
 @app.get("/api/tts")
 def api_tts():
     if not _authorized():
