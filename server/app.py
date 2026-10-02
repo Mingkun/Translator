@@ -502,7 +502,10 @@ def downloads(name: str):
     if not path.is_file():
         abort(404)
     mime = "application/vnd.android.package-archive" if safe.endswith(".apk") else "application/octet-stream"
-    return Response(path.read_bytes(), mimetype=mime)
+    resp = Response(path.read_bytes(), mimetype=mime)
+    # App 页面以 file:// 打开（null origin），缺这个头会被 CORS 拦截，导致检查更新失效
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
 
 
 @app.get("/api/city-guide")
