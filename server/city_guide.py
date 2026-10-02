@@ -312,11 +312,150 @@ def get_guide(city: str, refresh: bool = False) -> dict:
     except Exception:
         data["summary"] = ""
 
+    # 交给大模型整合梳理（素材零散/繁体/有噪音时效果最明显）
+    try:
+        ai = _llm_guide(city, data)
+    except Exception:
+        ai = None
+    if ai:
+        data["summary"] = ai["summary"] or data["summary"]
+        for k in ("foods", "spots", "hotels", "streets", "arrive", "tips"):
+            if ai.get(k):
+                data[k] = ai[k]
+        data["ok"] = True
+        data["ai"] = True
+
     if not data["ok"] and not data["summary"]:
         return data
 
     _write_cache(city, data)
     return data
+
+
+# ==================== 大模型整理 ====================
+
+LLM_SYSTEM = (
+    "你是资深的城市旅行攻略编辑，擅长把零散素材整理成准确、实用的攻略。"
+    "只输出 JSON，不要任何解释文字。所有内容用简体中文。"
+)
+
+
+def _llm_json(system: str, user: str, max_tokens: int = 3200):
+    """调大模型并返回解析后的 JSON。DeepSeek 主 → zai GLM 备。失败返回 None。
+
+    总预算 36 秒（gunicorn 工作进程 60 秒超时，App 取数也有限时）。
+    """
+    started = time.time()
+    try:
+        import translate as engine  # 复用项目已有的密钥读取与 JSON 提取
+    except Exception:
+        return None
+
+    payload_base = {
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        # 注意：deepseek-flash 是推理模型，开 json_object 时推理会吃掉预算、content 返回空串；
+        # 因此不开 response_format，靠提示词约束 + 本地 JSON 提取。
+        "temperature": 0.3,
+        "max_tokens": max_tokens,
+    }
+    attempts = []
+    try:
+        dk = engine._deepseek_key()
+        if dk:
+            attempts.append(("https://api.deepseek.com/chat/completions", "deepseek-flash", dk))
+    except Exception:
+        pass
+    try:
+        zk = engine._zai_key()
+        if zk:
+            attempts.append(("https://api.z.ai/api/coding/paas/v4/chat/completions", "glm-5.3", zk))
+    except Exception:
+        pass
+
+    for url, model, key in attempts:
+        if time.time() - started > 34:
+            break
+        body = dict(payload_base)
+        body["model"] = model
+        try:
+            req = urllib.request.Request(
+                url, data=json.dumps(body).encode(), method="POST",
+                headers={"Content-Type": "application/json",
+                         "Authorization": f"Bearer {key}",
+                         "User-Agent": UA})
+            left = max(6.0, 36.0 - (time.time() - started))
+            with urllib.request.urlopen(req, timeout=left) as resp:
+                data = json.loads(resp.read().decode("utf-8", "replace"))
+            content = str(((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "")
+            parsed = engine._extract_json_object(content)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            continue
+    return None
+
+
+def _pairs(v, limit: int):
+    """把模型返回的数组规范成 [[名称, 说明], ...]。"""
+    out = []
+    if not isinstance(v, list):
+        return out
+    for it in v:
+        if isinstance(it, (list, tuple)) and len(it) >= 2:
+            a, b = _clean(str(it[0])), _clean(str(it[1]))
+        elif isinstance(it, dict):
+            a = _clean(str(it.get("name") or it.get("title") or ""))
+            b = _clean(str(it.get("desc") or it.get("content") or it.get("note") or ""))
+        else:
+            a, b = _clean(str(it)), ""
+        if a and [a, b] not in out:
+            out.append([a, b[:80]])
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _llm_guide(city: str, raw: dict):
+    """把抓取到的零散素材交给大模型整合成结构化攻略。"""
+    lines = []
+    if raw.get("summary"):
+        lines.append("【简介】" + raw["summary"][:300])
+    for key, label in (("spots", "景点"), ("foods", "美食"), ("hotels", "住宿"),
+                       ("streets", "街区购物"), ("arrive", "抵达交通"), ("tips", "实用信息")):
+        items = raw.get(key) or []
+        if items:
+            txt = "；".join((i[0] + ("—" + i[1] if len(i) > 1 and i[1] else "")) for i in items[:12])
+            lines.append(f"【{label}】{txt[:900]}")
+    if not lines:
+        lines.append("（无外部素材）")
+
+    user = (
+        f"请为「{city}」整理一份旅行攻略，输出 JSON，字段固定为：\n"
+        '{"summary":"60-120字城市概览",'
+        '"foods":[["菜名","一句话说明"]],"spots":[["景点名","一句话说明"]],'
+        '"hotels":[["住宿区域或代表性酒店","一句话说明"]],'
+        '"streets":[["街区/商圈","一句话说明"]],'
+        '"arrive":[["交通方式","说明"]],"tips":[["要点","说明"]]}\n'
+        "数量：foods 5-8、spots 6-10、hotels 3-5、streets 2-4、arrive 2-4、tips 3-5。\n"
+        "要求：基于素材整理，剔除机场/车站/政务机构等非游玩项；素材不足时用你确知的地道内容补齐；"
+        "不要编造不存在的地点；每条说明不超过 40 字；全部简体中文。\n\n"
+        f"素材如下：\n" + "\n".join(lines)
+    )
+    j = _llm_json(LLM_SYSTEM, user)
+    if not isinstance(j, dict):
+        return None
+    out = {
+        "summary": _clean(str(j.get("summary") or ""))[:300],
+        "foods": _pairs(j.get("foods"), 10),
+        "spots": _pairs(j.get("spots"), 12),
+        "hotels": _pairs(j.get("hotels"), 6),
+        "streets": _pairs(j.get("streets"), 5),
+        "arrive": _pairs(j.get("arrive"), 5),
+        "tips": _pairs(j.get("tips"), 5),
+    }
+    if not any(out[k] for k in ("foods", "spots", "hotels")):
+        return None
+    return out
 
 
 # ==================== 行程规划 ====================
