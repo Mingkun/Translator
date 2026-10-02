@@ -363,9 +363,12 @@ def _llm_json(system: str, user: str, max_tokens: int = 8192):
         "max_tokens": max_tokens,
     }
     attempts = []
+    # deepseek-chat 是非推理模型：秒回、不占推理预算（实测 3 秒 vs 推理模型 16 秒）；
+    # 失败再退到推理模型 deepseek-flash，最后 GLM。
     try:
         dk = engine._deepseek_key()
         if dk:
+            attempts.append(("https://api.deepseek.com/chat/completions", "deepseek-chat", dk))
             attempts.append(("https://api.deepseek.com/chat/completions", "deepseek-flash", dk))
     except Exception:
         pass
@@ -381,6 +384,9 @@ def _llm_json(system: str, user: str, max_tokens: int = 8192):
             break
         body = dict(payload_base)
         body["model"] = model
+        # 非推理模型给足就行；推理模型需要 8192，否则推理会吃掉全部预算
+        if model.endswith("flash"):
+            body["max_tokens"] = max(int(body.get("max_tokens") or 0), 8192)
         try:
             req = urllib.request.Request(
                 url, data=json.dumps(body).encode(), method="POST",
@@ -482,6 +488,8 @@ def _normalize_guide(j):
 STATION_CACHE = DATA_DIR / "station_names.js"
 TRIP_CACHE_DIR = DATA_DIR / "trip_cache"
 TRIP_TTL = 7 * 24 * 3600
+# 行程提示词一变就升级版本，旧缓存自动失效
+TRIP_CACHE_VERSION = "v2"
 
 
 def _trip_key(frm: str, to: str) -> str:
@@ -489,7 +497,7 @@ def _trip_key(frm: str, to: str) -> str:
 
 
 def _trip_cache_read(frm: str, to: str):
-    p = TRIP_CACHE_DIR / f"{_trip_key(frm, to)}.json"
+    p = TRIP_CACHE_DIR / f"{TRIP_CACHE_VERSION}-{_trip_key(frm, to)}.json"
     try:
         if p.is_file() and (time.time() - p.stat().st_mtime) < TRIP_TTL:
             return json.loads(p.read_text(encoding="utf-8"))
@@ -501,40 +509,49 @@ def _trip_cache_read(frm: str, to: str):
 def _trip_cache_write(frm: str, to: str, data: dict):
     try:
         TRIP_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        (TRIP_CACHE_DIR / f"{_trip_key(frm, to)}.json").write_text(
+        (TRIP_CACHE_DIR / f"{TRIP_CACHE_VERSION}-{_trip_key(frm, to)}.json").write_text(
             json.dumps(data, ensure_ascii=False), encoding="utf-8")
     except Exception:
         pass
 
 
 def _llm_trip(frm: str, to: str, base: dict):
-    """把已算好的事实数据交给大模型，整合成可执行的出行方案。"""
+    """让大模型给出这条线路的真实车次与运行时长，并整合成可执行方案。
+
+    距离/票价区间仍由服务端算（可复核），车次与时长用模型知识（非实时）。
+    """
     facts = []
     if base.get("distance"):
-        facts.append(f"陆路距离约 {base['distance']} 公里")
-    for m in base.get("modes", []):
-        facts.append(f"{m['mode']}：{m['hoursText']}，{m['priceText']}")
-    fs = "、".join(s["name"] for s in (base.get("fromStations") or [])[:3]) or "未知"
-    ts = "、".join(s["name"] for s in (base.get("toStations") or [])[:3]) or "未知"
+        facts.append(f"直线推算陆路距离约 {base['distance']} 公里")
+    fs = "、".join(s["name"] for s in (base.get("fromStations") or [])[:4]) or "未知"
+    ts = "、".join(s["name"] for s in (base.get("toStations") or [])[:4]) or "未知"
     user = (
-        f"为「{frm} → {to}」整理一份出行方案。已算出的事实数据：\n"
-        + "；".join(facts) + f"\n{frm}主要车站：{fs}；{to}主要车站：{ts}\n\n"
-        '请输出 JSON：{"summary":"一句话总体建议",'
+        f"请给出「{frm} → {to}」的真实出行信息。参考：{frm}车站有 {fs}；{to}车站有 {ts}。\n"
+        '输出 JSON：{"summary":"一句话总体建议",'
+        '"hsrHours":"高铁实际约几小时（含中转，如 6-7 小时）",'
+        '"trains":[["车次或方案","区间/时长/说明"]],'
         '"modes":[["交通方式","什么时候选它、要注意什么"]],'
         '"plan":[["环节","具体做法"]],"tips":[["要点","说明"]]}\n'
-        "要求：modes 给 2-3 条（从高铁/飞机/自驾中选合适的）；plan 给 4 条，环节依次为「订票」「出发当天」「途中」「到达后」；"
-        "tips 给 3 条。每条说明 30 字以内，简体中文；只写常识性建议，不要编造具体车次或票价数字。"
+        "要求：\n"
+        "1) trains 列出这条线路的 3-6 个常见高铁方案，写清是直达还是中转、大致运行时长、经停主要城市；"
+        "能确定车次号（如 G 字头）就写，不确定就写「直达」或「经××中转」而不编造具体车号。\n"
+        "2) hsrHours 必须是你判断的实际时长（山区/绕行线路往往比直线距离估的更长），不要照抄按距离算的值。\n"
+        "3) modes 给 2-3 条（高铁/飞机/自驾）；plan 给 4 条（订票/出发当天/途中/到达后）；tips 给 3 条。\n"
+        "4) 每条说明 40 字以内，简体中文。\n"
+        + (f"5) 距离参考（仅参考，不要直接据此算时长）：约 {base.get('distance')} 公里。\n" if base.get("distance") else "")
     )
-    j = _llm_json(LLM_SYSTEM, user, max_tokens=6000)
+    j = _llm_json(LLM_SYSTEM, user, max_tokens=8192)
     if not isinstance(j, dict):
         return None
     out = {
         "summary": _clean(str(j.get("summary") or ""))[:120],
+        "hsrHours": _clean(str(j.get("hsrHours") or ""))[:40],
+        "trains": _pairs(j.get("trains"), 8),
         "modes": _pairs(j.get("modes"), 4),
         "plan": _pairs(j.get("plan"), 6),
         "tips": _pairs(j.get("tips"), 5),
     }
-    if not (out["plan"] or out["tips"] or out["summary"]):
+    if not (out["plan"] or out["trains"] or out["summary"]):
         return None
     return out
 
@@ -646,6 +663,15 @@ def get_trip(frm: str, to: str) -> dict:
             res["tips"] = ai["tips"]
         if ai.get("modes"):
             res["aiModes"] = ai["modes"]
+        if ai.get("trains"):
+            res["trains"] = ai["trains"]
+        # 用模型的真实判断纠正按距离估算的时长
+        if ai.get("hsrHours"):
+            for m in res.get("modes", []):
+                if m.get("mode") == "高铁":
+                    m["hoursText"] = ai["hsrHours"] + "（大模型判断）"
+                    m["estimated"] = False
+            res["hsrHours"] = ai["hsrHours"]
 
     _trip_cache_write(frm, to, res)
     return res
