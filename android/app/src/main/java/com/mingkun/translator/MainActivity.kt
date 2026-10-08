@@ -84,9 +84,16 @@ class MainActivity : Activity() {
                 } else {
                     request.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, name)
                 }
-                val dm = getSystemService(DOWNLOAD_SERVICE) as android.app.DownloadManager
-                val id = dm.enqueue(request)
-                if (isApk) updateDownloadId = id
+                Thread {
+                    try {
+                        val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                        conn.connectTimeout = 15000; conn.readTimeout = 60000
+                        val file = java.io.File(getExternalFilesDir(null), if (isApk) "translator-update.apk" else name)
+                        java.io.FileOutputStream(file).use { output -> conn.inputStream.use { input -> input.copyTo(output) } }
+                        conn.disconnect()
+                        if (isApk) runOnUiThread { openDownloadedApk() }
+                    } catch (_: Exception) {}
+                }.start()
             } catch (e: Exception) {
                 try {
                     startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
