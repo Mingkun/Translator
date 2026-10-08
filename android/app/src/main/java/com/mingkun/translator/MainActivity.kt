@@ -19,6 +19,17 @@ class MainActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            try {
+                java.io.File(getExternalFilesDir(null), "crash.txt").writeText(
+                    "time=" + System.currentTimeMillis() + "\nthread=" + t.name + "\n" + android.util.Log.getStackTraceString(e))
+            } catch (_: Exception) {}
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
+        val lastCrash = try {
+            val cf = java.io.File(getExternalFilesDir(null), "crash.txt")
+            if (cf.isFile) cf.readText().also { cf.delete() } else null
+        } catch (_: Exception) { null }
         web = WebView(this)
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
@@ -53,7 +64,7 @@ class MainActivity : Activity() {
                     runOnUiThread { request.grant(request.resources) }
                 } else {
                     pendingPermRequest = request
-                    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 2001)
+                    try { requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 2001) } catch (_: Exception) { runOnUiThread { request.deny() } }
                 }
             }
         }
@@ -83,19 +94,34 @@ class MainActivity : Activity() {
                 }
             }
         }
-        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 2002)
+        try {
+            if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 2002)
+            }
+        } catch (_: Exception) {
         }
         setContentView(web)
-        registerReceiver(object : android.content.BroadcastReceiver() {
-            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
-                val id = intent?.getLongExtra(android.app.DownloadManager.EXTRA_DOWNLOAD_ID, -1L) ?: -1L
-                if (id > 0 && id == updateDownloadId) openDownloadedApk()
+        try {
+            val dlReceiver = object : android.content.BroadcastReceiver() {
+                override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                    val id = intent?.getLongExtra(android.app.DownloadManager.EXTRA_DOWNLOAD_ID, -1L) ?: -1L
+                    if (id > 0 && id == updateDownloadId) openDownloadedApk()
+                }
             }
-        }, android.content.IntentFilter(android.app.DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+            val dlFilter = android.content.IntentFilter(android.app.DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+            if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(dlReceiver, dlFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
+            else registerReceiver(dlReceiver, dlFilter)
+        } catch (_: Exception) {
+        }
 
         if (savedInstanceState != null) {
-            web.restoreState(savedInstanceState)
+            try { web.restoreState(savedInstanceState) } catch (_: Exception) {}
+        } else if (lastCrash != null) {
+            val esc = lastCrash.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            web.loadDataWithBaseURL(null, "<html><body style='font-family:monospace;padding:16px;font-size:12px;white-space:pre-wrap;line-height:1.5'>" +
+                "<h3>翻译鹦鹉 v1.1 上次启动崩溃现场</h3>" +
+                "<p style='color:#b02a37'>请截图发给机器人排查；重新打开应用会再次尝试正常启动</p><hr>" +
+                esc.take(6000) + "</body></html>", "text/html", "utf-8", null)
         } else {
             web.loadUrl("https://5130599.best/Translator/")
         }
