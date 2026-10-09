@@ -8,6 +8,95 @@ from flask import Flask, request, jsonify, Response, abort
 
 import translate as engine
 
+import json as _json, base64 as _base64, uuid as _uuid, urllib.request as _urllib_req
+
+VOLC_TTS_PATH = '/work/Translator/volc_tts.json'
+TTS_CACHE_DIR = Path('/work/Translator/tts_cache')
+
+def _tts_cache_key(speaker, rate, text):
+    import hashlib
+    return hashlib.md5((speaker + '|' + (rate or '') + '|' + text).encode('utf-8')).hexdigest()
+
+def _tts_cache_get(key):
+    try:
+        p = TTS_CACHE_DIR / (key + '.mp3')
+        if p.exists():
+            return p.read_bytes()
+    except Exception:
+        pass
+    return None
+
+def _tts_cache_put(key, data):
+    try:
+        TTS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = TTS_CACHE_DIR / (key + '.tmp')
+        tmp.write_bytes(data)
+        tmp.rename(TTS_CACHE_DIR / (key + '.mp3'))
+        files = sorted(TTS_CACHE_DIR.glob('*.mp3'), key=lambda f: f.stat().st_mtime)
+        if len(files) > 5000:
+            for f in files[:len(files) - 4000]:
+                try:
+                    f.unlink()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+def _volc_cfg():
+    try:
+        with open(VOLC_TTS_PATH, encoding='utf-8') as f:
+            j = _json.load(f)
+        key = j.get('api_key') or j.get('token') or ''
+        if key:
+            return {'api_key': key, 'male_speaker': j.get('male_speaker') or '', 'female_speaker': j.get('female_speaker') or ''}
+    except Exception:
+        pass
+    return None
+
+def _volc_voice_for(voice):
+    cfg = _volc_cfg()
+    if not cfg:
+        return None
+    if voice in ('zh-CN-YunxiNeural', 'zh-CN-YunyangNeural'):
+        return cfg.get('male_speaker') or None
+    if voice in ('zh-CN-XiaoxiaoNeural', 'zh-CN-XiaoyiNeural'):
+        return cfg.get('female_speaker') or None
+    return None
+
+def _volc_tts_bytes(text, speaker):
+    import time as _time
+    cfg = _volc_cfg()
+    headers = {'Content-Type': 'application/json', 'X-Api-Key': cfg['api_key'], 'X-Api-Resource-Id': 'seed-tts-2.0'}
+    body = _json.dumps({'user': {'uid': 'translator'},
+                        'unique_id': str(_uuid.uuid4()),
+                        'req_params': {'text': text[:200], 'speaker': speaker,
+                                       'audio_params': {'format': 'mp3', 'sample_rate': 24000},
+                                       'additions': '{}'}}).encode('utf-8')
+    req = _urllib_req.Request('https://openspeech.bytedance.com/api/v3/tts/submit', data=body,
+                              headers=dict(headers, **{'X-Api-Request-Id': str(_uuid.uuid4())}))
+    with _urllib_req.urlopen(req, timeout=20) as r:
+        j = _json.loads(r.read().decode('utf-8'))
+    task_id = (j.get('data') or {}).get('task_id') or j.get('task_id')
+    if not task_id:
+        raise RuntimeError('volc submit %s %s' % (j.get('code'), j.get('message')))
+    for _ in range(30):
+        _time.sleep(1)
+        qreq = _urllib_req.Request('https://openspeech.bytedance.com/api/v3/tts/query',
+                                   data=_json.dumps({'task_id': task_id}).encode('utf-8'),
+                                   headers=dict(headers, **{'X-Api-Request-Id': str(_uuid.uuid4())}))
+        try:
+            with _urllib_req.urlopen(qreq, timeout=20) as r:
+                q = _json.loads(r.read().decode('utf-8'))
+        except Exception:
+            continue
+        d = q.get('data') or {}
+        if d.get('audio_url'):
+            with _urllib_req.urlopen(_urllib_req.Request(d['audio_url']), timeout=30) as ar:
+                return ar.read()
+        if (d.get('task_status') or 0) >= 3:
+            raise RuntimeError('volc task failed status=%s' % d.get('task_status'))
+    raise RuntimeError('volc timeout')
+
 APP_ROOT = Path(__file__).resolve().parents[1]
 API_TOKEN = os.environ.get("TRANSLATOR_API_TOKEN", "")
 app = Flask(__name__)
@@ -25,7 +114,7 @@ def _client_token() -> str:
 def _authorized() -> bool:
     if not API_TOKEN:
         return True
-    return _client_token() == API_TOKEN
+    return _client_token().strip() == API_TOKEN.strip()
 
 
 @app.get("/health")
@@ -556,6 +645,18 @@ def api_tts():
     if rate and not _re.fullmatch(r"[+-][0-9]{1,2}%", rate):
         abort(400)
     try:
+        volc_voice = _volc_voice_for(voice) if voice else None
+        if volc_voice:
+            ck = _tts_cache_key(volc_voice, rate, text)
+            cached = _tts_cache_get(ck)
+            if cached is not None:
+                return Response(cached, mimetype="audio/mpeg")
+            try:
+                data = _volc_tts_bytes(text, volc_voice, rate)
+                _tts_cache_put(ck, data)
+                return Response(data, mimetype="audio/mpeg")
+            except Exception:
+                pass
         data = engine.tts_bytes(text, lang, voice, rate)
         return Response(data, mimetype="audio/mpeg")
     except Exception:
