@@ -63,7 +63,7 @@ def _volc_voice_for(voice):
         return cfg.get('female_speaker') or None
     return None
 
-def _volc_tts_bytes(text, speaker):
+def _volc_tts_bytes(text, speaker, rate=""):
     import time as _time
     cfg = _volc_cfg()
     headers = {'Content-Type': 'application/json', 'X-Api-Key': cfg['api_key'], 'X-Api-Resource-Id': 'seed-tts-2.0'}
