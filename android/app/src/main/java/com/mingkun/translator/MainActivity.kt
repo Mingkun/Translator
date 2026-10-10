@@ -130,7 +130,7 @@ class MainActivity : Activity() {
                 "<p style='color:#b02a37'>请截图发给机器人排查；重新打开应用会再次尝试正常启动</p><hr>" +
                 esc.take(6000) + "</body></html>", "text/html", "utf-8", null)
         } else {
-            web.loadUrl("http://43.165.188.170/Translator/")
+            web.loadUrl("https://5130599.best/Translator/")
         }
     }
 
