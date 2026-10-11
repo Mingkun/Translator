@@ -629,6 +629,148 @@ def api_trip():
     return resp
 
 
+@app.get("/api/lrc-lookup")
+def api_lrc_lookup():
+    _resp_cors = True  # 标记需要CORS
+    """歌词查找：lrclib → 网易云 → 生成提示"""
+    import urllib.request as _u, json as _json, urllib.parse as _up
+    if not _authorized():
+        abort(401)
+    track = (request.args.get("track") or "").strip()
+    artist = (request.args.get("artist") or "").strip()
+    if not track:
+        return jsonify(ok=False, error="missing track"), 400
+
+    # 0) 服务端缓存
+    try:
+        _cd = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), 'lrc_cache')
+        _fp = _os.path.join(_cd, _hash.md5((artist.lower() + '|' + track.lower()).encode('utf-8')).hexdigest() + '.lrc')
+        if _os.path.exists(_fp):
+            with open(_fp, 'r', encoding='utf-8') as f:
+                _cached = f.read()
+            if _cached.strip():
+                return jsonify(ok=True, source="cache", lrc=_cached, name=track)
+    except Exception:
+        pass
+
+    # 1) lrclib.net
+    try:
+        q = _up.urlencode({"track_name": track, **({"artist_name": artist} if artist else {})})
+        req = _u.Request(f"https://lrclib.net/api/search?{q}", headers={"Accept": "application/json", "User-Agent": "PD FViewer/1.0"})
+        with _u.urlopen(req, timeout=10) as r:
+            j = _json.loads(r.read().decode())
+        if j and j[0].get("syncedLyrics"):
+            return jsonify(ok=True, source="lrclib", lrc=j[0]["syncedLyrics"], name=j[0].get("trackName", track))
+        if j and j[0].get("plainLyrics"):
+            return jsonify(ok=True, source="lrclib-plain", lrc=j[0]["plainLyrics"], name=j[0].get("trackName", track))
+    except Exception:
+        pass
+
+    # 2) 网易云音乐（多策略搜索 + 结果验证）
+    import re as _re
+    def _netease_search(q_str):
+        try:
+            q = _up.urlencode({"s": q_str, "type": 1, "limit": 5})
+            req = _u.Request(f"https://music.163.com/api/search/get?{q}",
+                             headers={"User-Agent": "Mozilla/5.0", "Referer": "https://music.163.com"})
+            with _u.urlopen(req, timeout=10) as r:
+                return (_json.loads(r.read().decode()).get("result") or {}).get("songs") or []
+        except Exception:
+            return []
+    def _netease_lyric(sid):
+        try:
+            req2 = _u.Request(f"https://music.163.com/api/song/lyric?id={sid}&lv=1&kv=1&tv=-1",
+                              headers={"User-Agent": "Mozilla/5.0", "Referer": "https://music.163.com"})
+            with _u.urlopen(req2, timeout=10) as r2:
+                lj = _json.loads(r2.read().decode())
+            return ((lj.get("lrc") or {}).get("lyric") or "").strip()
+        except Exception:
+            return ""
+    # 清理歌手名：取第一个歌手、去掉&和空格后缀
+    clean_artist = _re.sub(r'[&＆].*$', '', artist).strip() or artist
+    # 搜索策略：歌名+歌手 → 歌名+第一歌手 → 只搜歌名
+    queries = []
+    if artist and artist != clean_artist:
+        queries.append(f"{track} {clean_artist}")
+    if clean_artist:
+        queries.append(f"{track} {clean_artist}")
+    queries.append(track)
+    for qs in queries:
+        songs = _netease_search(qs)
+        for song in songs:
+            sname = song.get("name", "")
+            # 验证：歌名必须包含搜索词的关键部分
+            if track.lower() not in sname.lower() and sname.lower() not in track.lower():
+                continue
+            lrc = _netease_lyric(song["id"])
+            if lrc:
+                return jsonify(ok=True, source="netease", lrc=lrc, name=sname)
+    # 3) AI 生成歌词（DeepSeek）
+    try:
+        import os as _os
+        _ds_key = _os.environ.get("DEEPSEEK_API_KEY", "")
+        if _ds_key:
+            _prompt = f"请完整输出歌曲《{track}》的歌词"
+            if clean_artist:
+                _prompt += f"，演唱：{clean_artist}"
+            _prompt += "。只输出歌词文本，不要任何解释或标记。"
+            _body = _json.dumps({
+                "model": "deepseek-chat",
+                "messages": [{"role": "user", "content": _prompt}],
+                "max_tokens": 2000,
+                "temperature": 0.3
+            }).encode("utf-8")
+            _req = _u.Request("https://api.deepseek.com/v1/chat/completions",
+                data=_body,
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {_ds_key}"})
+            with _u.urlopen(_req, timeout=30) as r:
+                _cj = _json.loads(r.read().decode())
+            _lyrics = ((_cj.get("choices") or [{}])[0].get("message") or {}).get("content", "").strip()
+            if _lyrics and len(_lyrics) > 20:
+                return jsonify(ok=True, source="ai", lrc=_lyrics, name=track)
+    except Exception:
+        pass
+
+    return jsonify(ok=False, error="not found")
+
+@app.route("/api/lrc-cache", methods=["OPTIONS", "POST", "GET"])
+def api_lrc_cache():
+    """歌词缓存：POST 存 / GET 取"""
+    import os as _os, hashlib as _hash
+    if request.method == 'OPTIONS':
+        _r = jsonify(ok=True)
+        _r.headers['Access-Control-Allow-Origin'] = '*'
+        _r.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
+        return _r
+    cache_dir = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), 'lrc_cache')
+    _os.makedirs(cache_dir, exist_ok=True)
+    def _key(track, artist):
+        raw = (artist.lower() + '|' + track.lower()).encode('utf-8')
+        return _hash.md5(raw).hexdigest() + '.lrc'
+    track = (request.values.get('track') or '').strip()
+    artist = (request.values.get('artist') or '').strip()
+    if not track:
+        return jsonify(ok=False, error='missing track'), 400
+    fp = _os.path.join(cache_dir, _key(track, artist))
+    if request.method == 'POST':
+        lrc = request.get_data(as_text=True) or ''
+        if lrc.strip():
+            with open(fp, 'w', encoding='utf-8') as f:
+                f.write(lrc)
+        return jsonify(ok=True)
+    else:
+        if _os.path.exists(fp):
+            with open(fp, 'r', encoding='utf-8') as f:
+                return jsonify(ok=True, lrc=f.read(), source='cache')
+        return jsonify(ok=False)
+
+@app.after_request
+def _add_lrc_cors(resp):
+    if request.path == '/api/lrc-lookup':
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        resp.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+    return resp
+
 @app.get("/api/tts")
 def api_tts():
     if not _authorized():
