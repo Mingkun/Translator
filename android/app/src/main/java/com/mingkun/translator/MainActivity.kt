@@ -49,8 +49,11 @@ class MainActivity : Activity() {
                 filePathCallback = cb
                 val intent = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT)
                 intent.addCategory(android.content.Intent.CATEGORY_OPENABLE)
-                intent.type = "image/*"
-                startActivityForResult(android.content.Intent.createChooser(intent, "选择图片"), 1001)
+                // 根据 input 的 accept 属性选择类型（图片/音频/任意）
+                val accept = params?.acceptTypes?.firstOrNull { it.isNotBlank() }?.trim() ?: "*/*"
+                intent.type = accept
+                val labels = if (accept.startsWith("audio")) "选择音频文件" else if (accept.startsWith("image")) "选择图片" else "选择文件"
+                startActivityForResult(android.content.Intent.createChooser(intent, labels), 1001)
                 return true
             }
 
