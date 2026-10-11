@@ -634,6 +634,30 @@ def api_lrc_lookup():
     _resp_cors = True  # 标记需要CORS
     """歌词查找：lrclib → 网易云 → 生成提示"""
     import urllib.request as _u, json as _json, urllib.parse as _up
+    import os as _os, hashlib as _hash
+    def _sc(t, a, txt):
+        try:
+            _cd = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), 'lrc_cache')
+            _os.makedirs(_cd, exist_ok=True)
+            _k = _hash.md5(((a or '').lower() + '|' + t.lower()).encode('utf-8')).hexdigest() + '.lrc'
+            with open(_os.path.join(_cd, _k), 'w', encoding='utf-8') as f:
+                f.write(txt)
+        except Exception:
+            pass
+    # 先查缓存
+    track = (request.args.get("track") or "").strip()
+    artist = (request.args.get("artist") or "").strip()
+    try:
+        _cd = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), 'lrc_cache')
+        _k = _hash.md5((artist.lower() + '|' + track.lower()).encode('utf-8')).hexdigest() + '.lrc'
+        _fp = _os.path.join(_cd, _k)
+        if _os.path.exists(_fp):
+            with open(_fp, 'r', encoding='utf-8') as f:
+                _c = f.read()
+            if _c.strip():
+                return jsonify(ok=True, source="cache", lrc=_c, name=track)
+    except Exception:
+        pass
     if not _authorized():
         abort(401)
     track = (request.args.get("track") or "").strip()
@@ -649,6 +673,7 @@ def api_lrc_lookup():
             with open(_fp, 'r', encoding='utf-8') as f:
                 _cached = f.read()
             if _cached.strip():
+                _sc(track, artist, _cached)
                 return jsonify(ok=True, source="cache", lrc=_cached, name=track)
     except Exception:
         pass
@@ -660,8 +685,10 @@ def api_lrc_lookup():
         with _u.urlopen(req, timeout=10) as r:
             j = _json.loads(r.read().decode())
         if j and j[0].get("syncedLyrics"):
+            _sc(track, artist, j[0]["syncedLyrics"])
             return jsonify(ok=True, source="lrclib", lrc=j[0]["syncedLyrics"], name=j[0].get("trackName", track))
         if j and j[0].get("plainLyrics"):
+            _sc(track, artist, j[0]["plainLyrics"])
             return jsonify(ok=True, source="lrclib-plain", lrc=j[0]["plainLyrics"], name=j[0].get("trackName", track))
     except Exception:
         pass
@@ -704,6 +731,8 @@ def api_lrc_lookup():
                 continue
             lrc = _netease_lyric(song["id"])
             if lrc:
+                _sc(track, artist, lrc)
+                _sc(track, artist, lrc)
                 return jsonify(ok=True, source="netease", lrc=lrc, name=sname)
     # 3) AI 生成歌词（DeepSeek）
     try:
@@ -727,6 +756,8 @@ def api_lrc_lookup():
                 _cj = _json.loads(r.read().decode())
             _lyrics = ((_cj.get("choices") or [{}])[0].get("message") or {}).get("content", "").strip()
             if _lyrics and len(_lyrics) > 20:
+                _sc(track, artist, _lyrics)
+                _sc(track, artist, _lyrics)
                 return jsonify(ok=True, source="ai", lrc=_lyrics, name=track)
     except Exception:
         pass
