@@ -72,6 +72,25 @@
   .go, .gosec, #sysBtn { transition: transform .12s ease, filter .12s ease; }
   .go:active, .gosec:active, #sysBtn:active { transform: translateY(2px) scale(.96); filter: brightness(.95); }
   button { -webkit-user-select: none; user-select: none; }
+  #fileBrowser { display:none; position:fixed; inset:0; background:#fff; z-index:3000; flex-direction:column; }
+  #fileBrowser .fbHeader { display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--line); }
+  #fileBrowser .fbHeader .fbTitle { font-size:15px; color:#1f2733; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #fileBrowser .fbHeader button { border:none; background:#f0f4fa; color:#5a6472; border-radius:8px; padding:6px 12px; font-size:13px; cursor:pointer; font-family:inherit; }
+  #fileBrowser .fbTabs { display:flex; border-bottom:1px solid var(--line); }
+  #fileBrowser .fbTab { flex:1; text-align:center; padding:10px 0; font-size:13px; color:#8a94a6; cursor:pointer; border-bottom:2px solid transparent; }
+  #fileBrowser .fbTab.on { color:var(--brand); border-bottom-color:var(--brand); }
+  #fileBrowser .fbSortBar { display:flex; gap:4px; padding:6px 10px; border-bottom:1px solid var(--line); overflow-x:auto; }
+  #fileBrowser .fbSortBar button { flex-shrink:0; border:1px solid var(--line); background:#f0f4fa; color:#5a6472; border-radius:14px; padding:4px 10px; font-size:11px; cursor:pointer; font-family:inherit; }
+  #fileBrowser .fbSortBar button.on { color:var(--brand); background:#fff3ec; border-color:var(--brand); }
+  #fileBrowser .fbSearch { padding:6px 10px; border-bottom:1px solid var(--line); }
+  #fileBrowser .fbSearch input { width:100%; box-sizing:border-box; border:1px solid var(--line); background:#f7f9fc; color:#1f2733; border-radius:10px; padding:8px 12px; font-size:13px; outline:none; font-family:inherit; }
+  #fileBrowser .fbList { flex:1; overflow-y:auto; padding:6px 0; }
+  #fileBrowser .fbItem { display:flex; align-items:center; gap:10px; padding:10px 14px; cursor:pointer; }
+  #fileBrowser .fbItem:active { background:#f0f4fa; }
+  #fileBrowser .fbIcon { font-size:22px; width:28px; text-align:center; flex-shrink:0; }
+  #fileBrowser .fbName { font-size:14px; color:#1f2733; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #fileBrowser .fbSub { font-size:11px; color:#8a94a6; flex-shrink:0; }
+  #fileBrowser .fbEmpty { text-align:center; padding:40px; color:#8a94a6; font-size:13px; }
 </style>
 </head>
 <body>
@@ -1801,7 +1820,10 @@ imgInput.addEventListener('change', function(){
   imgInput.value = '';
 });
 var audioInput = document.getElementById('audioInput');
-document.getElementById('audioTrBtn').addEventListener('click', function(){ audioInput.click(); });
+document.getElementById('audioTrBtn').addEventListener('click', function(){
+  if (window.AppBridge && AppBridge.listFiles) { fbOpen(); return; }
+  audioInput.click();
+});
 audioInput.addEventListener('change', function(){
   var file = audioInput.files && audioInput.files[0];
   if (!file) return;
@@ -1825,6 +1847,141 @@ audioInput.addEventListener('change', function(){
     .catch(function(){ resultEl.innerHTML = '<div class="card"><div class="err">上传失败，请重试</div></div>'; });
   audioInput.value = '';
 });
+/* ===== ASR 上传（供音频文件选择调用） ===== */
+function asrUpload(file) {
+  if (!file) return;
+  if (file.size > 60 * 1024 * 1024) { resultEl.innerHTML = '<div class="card"><div class="err">文件过大（限 60MB）</div></div>'; return; }
+  resultEl.innerHTML = '<div class="card"><div class="empty">🎧 识别并翻译中…（首次较慢，请稍候）</div></div>';
+  var asrUrl = 'api/asr?' + 'token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
+  fetch(asrUrl, { method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/octet-stream'}, body: file })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok) { resultEl.innerHTML = '<div class="card"><div class="err">'+esc(d.error||'识别失败')+'</div></div>'; return; }
+      var segs = d.segments || [];
+      if (!segs.length) { resultEl.innerHTML = '<div class="card"><div class="empty">未识别到语音</div></div>'; return; }
+      var langTag = d.lang ? '（' + esc(d.lang === 'en' ? '英语' : d.lang === 'zh' ? '中文' : d.lang) + '）' : '';
+      var html = '<div class="card"><div class="sec-title" style="margin-top:0">🎵 语音翻译' + langTag + '</div>';
+      segs.forEach(function(g){
+        html += '<div style="margin:10px 0">' + (g.zh ? '<div style="font-size:15px;line-height:1.7">' + esc(g.zh) + '</div>' : '') + '<div style="font-size:12px;color:#8a94a6;line-height:1.5">' + esc(g.t) + '</div></div>';
+      });
+      html += '</div>';
+      resultEl.innerHTML = html;
+    })
+    .catch(function(){ resultEl.innerHTML = '<div class="card"><div class="err">上传失败，请重试</div></div>'; });
+}
+/* ===== 自绘文件浏览器（移植自 PDF阅读器） ===== */
+var fbCurrent = '', fbTab = 'type', fbOrder = 'time', fbAsc = false, fbTypeCache = null;
+var FB_AUDIO = 'mp3,wav,ogg,m4a,flac,aac,wma,opus,m4b,amr,ape';
+function fmtSize(s) {
+  if (s < 1024) return s + 'B';
+  if (s < 1048576) return (s / 1024).toFixed(1) + 'KB';
+  if (s < 1073741824) return (s / 1048576).toFixed(1) + 'MB';
+  return (s / 1073741824).toFixed(1) + 'GB';
+}
+function _fbDrm(n) {
+  var d = ['mgg','mgg2','mflac','mmp3','ncm','qmcflac','qmcmp3','qmcogg','kgm','kuwo'];
+  var ln = n.toLowerCase(), ext = ln.split('.').pop();
+  if (d.indexOf(ext) >= 0) return true;
+  if (/\.(mgg2?|mflac|ncm|qmcflac|kgm)\.(flac|mp3|m4a|ogg|wav)$/.test(ln)) return true;
+  if (/\[mqms|\[qqmusic/i.test(n)) return true;
+  return false;
+}
+function fbOpen() {
+  fbTypeCache = null;
+  document.getElementById('fileBrowser').style.display = 'flex';
+  fbSwitchTab(fbTab);
+}
+function fbClose() { document.getElementById('fileBrowser').style.display = 'none'; }
+function fbReqPerm() { try { AppBridge.requestStoragePermission(); } catch (e) {} }
+function fbSwitchTab(tab) {
+  fbTab = tab;
+  document.getElementById('tabFolder').classList.toggle('on', tab === 'folder');
+  document.getElementById('tabType').classList.toggle('on', tab === 'type');
+  var up = document.getElementById('fbUpBtn'); if (up) up.style.display = tab === 'folder' ? '' : 'none';
+  document.getElementById('fbSearchBar').style.display = tab === 'type' ? 'block' : 'none';
+  if (tab === 'folder') { fbLoad(fbCurrent); } else { fbLoadType(); }
+}
+function fbSetOrder(o) {
+  if (fbOrder === o) { fbAsc = !fbAsc; } else { fbOrder = o; fbAsc = false; }
+  var id = o === 'time' ? 'ordTime' : o === 'name' ? 'ordName' : 'ordSize';
+  document.querySelectorAll('#fbSortBar button').forEach(function(b){ b.classList.toggle('on', b.id === id); });
+  if (fbTab === 'type') { if (fbTypeCache) fbRenderTypeList(fbTypeCache); else fbLoadType(); }
+}
+function fbFilterList() { if (fbTypeCache) fbRenderTypeList(fbTypeCache); }
+function fbLoadType() {
+  var list = document.getElementById('fbList');
+  document.getElementById('fbPath').textContent = '🎵 全部音频';
+  list.innerHTML = '<div class="fbEmpty">🔍 扫描中…</div>';
+  setTimeout(function() {
+    try {
+      if (AppBridge.hasStoragePermission && !AppBridge.hasStoragePermission()) {
+        list.innerHTML = '<div class="fbEmpty" style="padding:60px 30px">📂 需要文件访问权限<br><br><button onclick="fbReqPerm()" style="border:1px solid var(--line);background:#fff;color:var(--brand);border-radius:10px;padding:8px 24px;font-size:14px;cursor:pointer;font-family:inherit">授予权限</button><br><br><span style="font-size:11px;color:#8a94a6">点按钮 → 系统设置 → 允许「所有文件访问」</span></div>';
+        return;
+      }
+      var fresh = JSON.parse(AppBridge.searchFiles(FB_AUDIO));
+      if (fresh.length === 1 && fresh[0].n === '__NEED_PERM__') { list.innerHTML = '<div class="fbEmpty">📂 需要文件访问权限</div>'; return; }
+      fbTypeCache = fresh;
+      fbRenderTypeList(fresh);
+    } catch (e) { list.innerHTML = '<div class="fbEmpty">扫描失败</div>'; }
+  }, 50);
+}
+function fbRenderTypeList(items) {
+  var list = document.getElementById('fbList');
+  items = items.filter(function(it){ return !_fbDrm(it.n); });
+  var q = (document.getElementById('fbSearchInput') || {}).value || '';
+  if (q.trim()) { var ql = q.toLowerCase(); items = items.filter(function(it){ return it.n.toLowerCase().indexOf(ql) >= 0; }); }
+  var s = items.slice();
+  var dir = fbAsc ? 1 : -1;
+  if (fbOrder === 'time') s.sort(function(a,b){ return (a.t - b.t) * dir; });
+  else if (fbOrder === 'name') s.sort(function(a,b){ return a.n.localeCompare(b.n, 'zh') * dir; });
+  else if (fbOrder === 'size') s.sort(function(a,b){ return (a.s - b.s) * dir; });
+  if (!s.length) { list.innerHTML = '<div class="fbEmpty">没有找到音频文件</div>'; return; }
+  list.innerHTML = s.map(function(it){
+    return '<div class="fbItem" data-p="' + esc(it.p) + '" data-d="0"><div class="fbIcon">🎵</div><div class="fbName">' + esc(it.n) + '</div><div class="fbSub">' + fmtSize(it.s) + '</div></div>';
+  }).join('');
+  list.querySelectorAll('.fbItem').forEach(function(el){
+    el.onclick = function(){ fbOpenFile(el.getAttribute('data-p'), el.querySelector('.fbName').textContent); };
+  });
+}
+function fbGoUp() {
+  if (!fbCurrent || fbCurrent === '/storage/emulated/0') { fbClose(); return; }
+  var parent = fbCurrent.substring(0, fbCurrent.lastIndexOf('/'));
+  fbLoad(parent || '');
+}
+function fbLoad(path) {
+  fbCurrent = path;
+  var list = document.getElementById('fbList');
+  document.getElementById('fbPath').textContent = path ? (path.split('/').pop() || '内部存储') : '内部存储';
+  list.innerHTML = '<div class="fbEmpty">扫描中…</div>';
+  try {
+    if (AppBridge.hasStoragePermission && !AppBridge.hasStoragePermission()) { list.innerHTML = '<div class="fbEmpty">📂 需要文件访问权限</div>'; return; }
+    var items = JSON.parse(AppBridge.listFiles(path));
+    items = items.filter(function(it){ return it.d || !_fbDrm(it.n); });
+    if (!items.length) { list.innerHTML = '<div class="fbEmpty">空文件夹</div>'; return; }
+    list.innerHTML = items.map(function(it){
+      var icon = it.d ? '📁' : '🎵';
+      return '<div class="fbItem" data-p="' + esc(it.p) + '" data-d="' + (it.d ? '1' : '0') + '"><div class="fbIcon">' + icon + '</div><div class="fbName">' + esc(it.n) + '</div><div class="fbSub">' + (it.d ? '' : fmtSize(it.s)) + '</div></div>';
+    }).join('');
+    list.querySelectorAll('.fbItem').forEach(function(el){
+      el.onclick = function(){
+        var p = el.getAttribute('data-p');
+        if (el.getAttribute('data-d') === '1') { fbLoad(p); return; }
+        fbOpenFile(p, el.querySelector('.fbName').textContent);
+      };
+    });
+  } catch (e) { list.innerHTML = '<div class="fbEmpty">读取失败</div>'; }
+}
+function fbOpenFile(path, name) {
+  fbClose();
+  resultEl.innerHTML = '<div class="card"><div class="empty">🎧 读取并翻译中…</div></div>';
+  try {
+    var b64 = AppBridge.readFile(path);
+    if (!b64) { resultEl.innerHTML = '<div class="card"><div class="err">文件为空或过大（>100MB）</div></div>'; return; }
+    var bin = atob(b64), u8 = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    asrUpload(new Blob([u8]));
+  } catch (e) { resultEl.innerHTML = '<div class="card"><div class="err">打开失败</div></div>'; }
+}
 var historyOverlay = document.getElementById('historyOverlay');
 function fitOverlays() {
   var sys = document.getElementById('sysBtn');
@@ -2583,6 +2740,24 @@ if (trUserToken) refreshMe();
 updateMgrUI();
 qEl.addEventListener('keydown', function(e){ if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) translate(); });
 </script>
+<div id="fileBrowser">
+  <div class="fbHeader">
+    <button onclick="fbGoUp()" id="fbUpBtn">← 上级</button>
+    <div class="fbTitle" id="fbPath">内部存储</div>
+    <button onclick="fbClose()">✕</button>
+  </div>
+  <div class="fbTabs">
+    <div class="fbTab" id="tabFolder" onclick="fbSwitchTab('folder')">📁 文件夹</div>
+    <div class="fbTab on" id="tabType" onclick="fbSwitchTab('type')">🎵 音频</div>
+  </div>
+  <div class="fbSortBar" id="fbSortBar">
+    <button id="ordTime" class="on" onclick="fbSetOrder('time')">按日期</button>
+    <button id="ordName" onclick="fbSetOrder('name')">按名称</button>
+    <button id="ordSize" onclick="fbSetOrder('size')">按大小</button>
+  </div>
+  <div class="fbSearch" id="fbSearchBar"><input type="text" id="fbSearchInput" placeholder="🔍 输入文件名筛选…" oninput="fbFilterList()" /></div>
+  <div class="fbList" id="fbList"></div>
+</div>
 </body>
 </html>
 <style>textarea::placeholder{color:#8a94a6}</style>

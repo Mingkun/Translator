@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.os.Bundle
 import android.webkit.WebChromeClient
+import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -34,6 +35,7 @@ class MainActivity : Activity() {
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
         web.settings.mediaPlaybackRequiresUserGesture = false
+        web.addJavascriptInterface(Bridge(), "AppBridge")
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 return false
@@ -190,6 +192,127 @@ class MainActivity : Activity() {
             web.goBack()
         } else {
             super.onBackPressed()
+        }
+    }
+
+    inner class Bridge {
+        @JavascriptInterface
+        fun hasStoragePermission(): Boolean {
+            return if (android.os.Build.VERSION.SDK_INT >= 30) {
+                android.os.Environment.isExternalStorageManager()
+            } else {
+                checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+            }
+        }
+
+        @JavascriptInterface
+        fun requestStoragePermission() {
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        android.net.Uri.parse("package:$packageName"))
+                    startActivity(intent)
+                } else {
+                    requestPermissions(arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE), 100)
+                }
+            } catch (_: Exception) {}
+        }
+
+        @JavascriptInterface
+        fun searchFiles(ext: String): String {
+            try {
+                if (!hasStoragePermission()) return "[{\"n\":\"__NEED_PERM__\"}]"
+                val exts = ext.lowercase().split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+                val audioE = setOf("mp3", "wav", "ogg", "m4a", "flac", "aac", "wma", "opus")
+                val videoE = setOf("mp4", "webm", "mkv", "avi", "mov", "3gp", "m4v", "ts", "flv")
+                val checkMedia = exts.isEmpty() || exts.any { audioE.contains(it) || videoE.contains(it) }
+                val results = org.json.JSONArray()
+                val queue = ArrayDeque<java.io.File>()
+                queue.add(java.io.File("/storage/emulated/0"))
+                try {
+                    java.io.File("/storage").listFiles()?.forEach { d ->
+                        if (d.isDirectory && d.name != "emulated" && d.name != "self") queue.add(d)
+                    }
+                } catch (_: Exception) {}
+                val skipDirs = setOf("Android", "LOST.DIR", "obb", ".thumbnails", "cache")
+                var count = 0
+                while (queue.isNotEmpty() && count < 100000) {
+                    val dir = queue.removeFirst()
+                    val files = dir.listFiles() ?: continue
+                    for (f in files) {
+                        if (f.name.startsWith(".")) continue
+                        if (f.isDirectory) { if (f.name !in skipDirs) queue.add(f); continue }
+                        val fe = f.extension.lowercase()
+                        if (exts.isNotEmpty() && !exts.contains(fe)) continue
+                        if (checkMedia && (audioE.contains(fe) || videoE.contains(fe))) {
+                            if (!isRealMedia(f)) continue
+                        }
+                        val o = org.json.JSONObject()
+                        o.put("n", f.name); o.put("d", false)
+                        o.put("s", f.length()); o.put("t", f.lastModified()); o.put("p", f.absolutePath)
+                        results.put(o); count++
+                    }
+                }
+                return results.toString()
+            } catch (_: Exception) { return "[]" }
+        }
+
+        private fun isRealMedia(f: java.io.File): Boolean {
+            try {
+                java.io.FileInputStream(f).use { fis ->
+                    val h = ByteArray(12)
+                    val n = fis.read(h)
+                    if (n < 4) return false
+                    val b = { i: Int -> h[i].toInt() and 0xFF }
+                    val m4 = String(h, 0, 4, Charsets.ISO_8859_1)
+                    if (m4 == "fLaC") return true
+                    if (m4 == "OggS") return true
+                    if (m4 == "RIFF") return true
+                    if (m4.startsWith("FLV")) return true
+                    if (m4.startsWith("ID3")) return true
+                    if (b(0) == 0xFF && (b(1) and 0xE0) == 0xE0) return true
+                    if (b(0) == 0x1A && b(1) == 0x45 && b(2) == 0xDF && b(3) == 0xA3) return true
+                    if (b(0) == 0x30 && b(1) == 0x26 && b(2) == 0xB2 && b(3) == 0x75) return true
+                    if (b(0) == 0x47) return true
+                    if (n >= 8) {
+                        val tag = String(h, 4, 4, Charsets.ISO_8859_1)
+                        if (tag == "ftyp") return true
+                    }
+                    return false
+                }
+            } catch (_: Exception) { return true }
+        }
+
+        @JavascriptInterface
+        fun listFiles(path: String): String {
+            try {
+                if (!hasStoragePermission()) return "[]"
+                val dir = if (path.isEmpty()) java.io.File("/storage/emulated/0") else java.io.File(path)
+                if (!dir.exists() || !dir.isDirectory) return "[]"
+                val items = dir.listFiles()?.sortedWith(compareByDescending<java.io.File> { it.isDirectory }.thenByDescending { it.lastModified() }) ?: emptyList()
+                val arr = org.json.JSONArray()
+                for (f in items.take(500)) {
+                    if (f.name.startsWith(".")) continue
+                    val o = org.json.JSONObject()
+                    o.put("n", f.name)
+                    o.put("d", f.isDirectory)
+                    o.put("s", if (f.isFile) f.length() else 0)
+                    o.put("t", f.lastModified())
+                    o.put("p", f.absolutePath)
+                    arr.put(o)
+                }
+                return arr.toString()
+            } catch (_: Exception) { return "[]" }
+        }
+
+        @JavascriptInterface
+        fun readFile(path: String): String {
+            try {
+                val f = java.io.File(path)
+                if (!f.exists() || f.length() > 100 * 1024 * 1024) return ""
+                val bytes = f.readBytes()
+                return android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            } catch (_: Exception) { return "" }
         }
     }
 }
