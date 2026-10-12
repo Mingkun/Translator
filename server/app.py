@@ -644,9 +644,27 @@ def api_lrc_lookup():
                 f.write(txt)
         except Exception:
             pass
+    def _sim(a, b):
+        try:
+            import difflib
+            a = (a or "").lower().strip(); b = (b or "").lower().strip()
+            if not a or not b: return 0.0
+            if a == b: return 1.0
+            return difflib.SequenceMatcher(None, a, b).ratio()
+        except Exception:
+            return 0.0
+    def _looks_like_file(n):
+        import re as _r
+        n = (n or "").lower()
+        if "_" in n: return True
+        if _r.search(r'[a-z_]+\d{2,}', n): return True
+        if _r.search(r'\d{4,}', n): return True
+        return False
     # 先查缓存
     track = (request.args.get("track") or "").strip()
     artist = (request.args.get("artist") or "").strip()
+    if _looks_like_file(track):
+        return jsonify(ok=False, error="not a song")
     try:
         _cd = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), 'lrc_cache')
         _k = _hash.md5((artist.lower() + '|' + track.lower()).encode('utf-8')).hexdigest() + '.lrc'
@@ -684,12 +702,21 @@ def api_lrc_lookup():
         req = _u.Request(f"https://lrclib.net/api/search?{q}", headers={"Accept": "application/json", "User-Agent": "PD FViewer/1.0"})
         with _u.urlopen(req, timeout=10) as r:
             j = _json.loads(r.read().decode())
-        if j and j[0].get("syncedLyrics"):
-            _sc(track, artist, j[0]["syncedLyrics"])
-            return jsonify(ok=True, source="lrclib", lrc=j[0]["syncedLyrics"], name=j[0].get("trackName", track))
-        if j and j[0].get("plainLyrics"):
-            _sc(track, artist, j[0]["plainLyrics"])
-            return jsonify(ok=True, source="lrclib-plain", lrc=j[0]["plainLyrics"], name=j[0].get("trackName", track))
+        if j and j:
+            _best = None; _best_sc = 0.0
+            for _it in j:
+                _tn = _it.get("trackName", "") or ""
+                _an = _it.get("artistName", "") or ""
+                _score = max(_sim(track, _tn), _sim((track + " " + artist).strip(), (_tn + " " + _an).strip()))
+                if _score > _best_sc:
+                    _best_sc = _score; _best = _it
+            if _best and _best_sc >= 0.55:
+                if _best.get("syncedLyrics"):
+                    _sc(track, artist, _best["syncedLyrics"])
+                    return jsonify(ok=True, source="lrclib", lrc=_best["syncedLyrics"], name=_best.get("trackName", track))
+                if _best.get("plainLyrics"):
+                    _sc(track, artist, _best["plainLyrics"])
+                    return jsonify(ok=True, source="lrclib-plain", lrc=_best["plainLyrics"], name=_best.get("trackName", track))
     except Exception:
         pass
 
@@ -726,8 +753,8 @@ def api_lrc_lookup():
         songs = _netease_search(qs)
         for song in songs:
             sname = song.get("name", "")
-            # 验证：歌名必须包含搜索词的关键部分
-            if track.lower() not in sname.lower() and sname.lower() not in track.lower():
+            # 验证：歌名相似度或包含关系
+            if _sim(track, sname) < 0.5 and track.lower() not in sname.lower():
                 continue
             lrc = _netease_lyric(song["id"])
             if lrc:
@@ -738,7 +765,7 @@ def api_lrc_lookup():
     try:
         import os as _os
         _ds_key = _os.environ.get("DEEPSEEK_API_KEY", "")
-        if _ds_key:
+        if _ds_key and not _looks_like_file(track):
             _prompt = f"请完整输出歌曲《{track}》的歌词"
             if clean_artist:
                 _prompt += f"，演唱：{clean_artist}"
