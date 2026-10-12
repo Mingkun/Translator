@@ -668,6 +668,11 @@ def api_lrc_lookup():
     _tags = r'\s*\[(?:mqms\d*|qqmusic|flac|mp3|m4a|320k|hq|sq|ape|wav|ogg)\]\s*'
     track = _rt.sub(_tags, ' ', track, flags=_rt.I).strip() or track
     artist = _rt.sub(_tags, ' ', artist, flags=_rt.I).strip()
+    # 搜索用歌名：剥掉 (live)/(remix)/(acoustic)/现场版 等版本限定，避免匹配到别的歌
+    _vk = r'(?:live|现场|演唱会|remix|混音|acoustic|不插电|demo|伴奏|instrumental|karaoke|version|remaster|重制|mv|official|audio|完整版|高清|翻唱)'
+    _st = _rt.sub(r'\s*[\(（\[\【]\s*' + _vk + r'[^\)）\]\】]*[\)）\]\】]', ' ', track, flags=_rt.I).strip()
+    _st = _rt.sub(r'\s*[-–—]\s*' + _vk + r'\s*$', '', _st, flags=_rt.I).strip()
+    _st = _rt.sub(r'\s+' + _vk + r'\s*$', '', _st, flags=_rt.I).strip() or _st or track
     if _looks_like_file(track):
         return jsonify(ok=False, error="not a song")
     try:
@@ -703,7 +708,7 @@ def api_lrc_lookup():
 
     # 1) lrclib.net
     try:
-        q = _up.urlencode({"track_name": track, **({"artist_name": artist} if artist else {})})
+        q = _up.urlencode({"track_name": _st, **({"artist_name": artist} if artist else {})})
         req = _u.Request(f"https://lrclib.net/api/search?{q}", headers={"Accept": "application/json", "User-Agent": "PD FViewer/1.0"})
         with _u.urlopen(req, timeout=10) as r:
             j = _json.loads(r.read().decode())
@@ -712,7 +717,7 @@ def api_lrc_lookup():
             for _it in j:
                 _tn = _it.get("trackName", "") or ""
                 _an = _it.get("artistName", "") or ""
-                _score = max(_sim(track, _tn), _sim((track + " " + artist).strip(), (_tn + " " + _an).strip()))
+                _score = max(_sim(_st, _tn), _sim((_st + " " + artist).strip(), (_tn + " " + _an).strip()), _sim(track, _tn))
                 if _score > _best_sc:
                     _best_sc = _score; _best = _it
             if _best and _best_sc >= 0.55:
@@ -722,6 +727,28 @@ def api_lrc_lookup():
                 if _best.get("plainLyrics"):
                     _sc(track, artist, _best["plainLyrics"])
                     return jsonify(ok=True, source="lrclib-plain", lrc=_best["plainLyrics"], name=_best.get("trackName", track))
+    except Exception:
+        pass
+
+    # 1b) lrclib 只按【歌名】再搜一次（翻唱/合辑导致艺人对不上时用）
+    try:
+        q2 = _up.urlencode({"track_name": _st})
+        req2 = _u.Request(f"https://lrclib.net/api/search?{q2}", headers={"Accept": "application/json", "User-Agent": "PD FViewer/1.0"})
+        with _u.urlopen(req2, timeout=10) as r2:
+            j2 = _json.loads(r2.read().decode())
+        if j2:
+            _b2 = None; _s2 = 0.0
+            for _it in j2:
+                _tn = _it.get("trackName", "") or ""
+                _c2 = _sim(_st, _tn)
+                if _c2 > _s2: _s2 = _c2; _b2 = _it
+            if _b2 and _s2 >= 0.8:
+                if _b2.get("syncedLyrics"):
+                    _sc(track, artist, _b2["syncedLyrics"])
+                    return jsonify(ok=True, source="lrclib-name", lrc=_b2["syncedLyrics"], name=_b2.get("trackName", track))
+                if _b2.get("plainLyrics"):
+                    _sc(track, artist, _b2["plainLyrics"])
+                    return jsonify(ok=True, source="lrclib-name", lrc=_b2["plainLyrics"], name=_b2.get("trackName", track))
     except Exception:
         pass
 
@@ -750,16 +777,16 @@ def api_lrc_lookup():
     # 搜索策略：歌名+歌手 → 歌名+第一歌手 → 只搜歌名
     queries = []
     if artist and artist != clean_artist:
-        queries.append(f"{track} {clean_artist}")
+        queries.append(f"{_st} {clean_artist}")
     if clean_artist:
-        queries.append(f"{track} {clean_artist}")
-    queries.append(track)
+        queries.append(f"{_st} {clean_artist}")
+    queries.append(_st)
     for qs in queries:
         songs = _netease_search(qs)
         for song in songs:
             sname = song.get("name", "")
             # 验证：歌名相似度或包含关系
-            if _sim(track, sname) < 0.5 and track.lower() not in sname.lower():
+            if _sim(_st, sname) < 0.5 and _st.lower() not in sname.lower():
                 continue
             lrc = _netease_lyric(song["id"])
             if lrc:
