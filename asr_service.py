@@ -48,6 +48,7 @@ try:
     with _tm_lock:
         _c = sqlite3.connect(_TM_DB)
         _c.execute("CREATE TABLE IF NOT EXISTS tm (h TEXT PRIMARY KEY, src TEXT, zh TEXT, ts INTEGER)")
+        _c.execute("CREATE TABLE IF NOT EXISTS name_idx (k TEXT PRIMARY KEY, h TEXT, ts INTEGER)")
         _c.commit()
         _c.close()
 except Exception:
@@ -82,6 +83,35 @@ def _tm_put(pairs):
             con = sqlite3.connect(_TM_DB)
             for k, src, zh in pairs:
                 con.execute("INSERT OR REPLACE INTO tm (h, src, zh, ts) VALUES (?,?,?,?)", (k, src, zh, int(time.time())))
+            con.commit()
+            con.close()
+    except Exception:
+        pass
+
+
+# ── 文件名索引（name|size → 内容哈希），用于「同名文件」宽松命中 ──
+def _ni_key(name, size):
+    return hashlib.sha1((str(name) + "|" + str(size)).strip().lower().encode("utf-8")).hexdigest()
+
+
+def _ni_get(name, size):
+    try:
+        with _tm_lock:
+            con = sqlite3.connect(_TM_DB)
+            row = con.execute("SELECT h FROM name_idx WHERE k=?", (_ni_key(name, size),)).fetchone()
+            con.close()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
+def _ni_put(name, size, h):
+    try:
+        if not name:
+            return
+        with _tm_lock:
+            con = sqlite3.connect(_TM_DB)
+            con.execute("INSERT OR REPLACE INTO name_idx (k, h, ts) VALUES (?,?,?)", (_ni_key(name, size), h, int(time.time())))
             con.commit()
             con.close()
     except Exception:
@@ -152,7 +182,7 @@ def _translate(text_lines):
     return [memo.get(keys[i], "") for i in range(len(text_lines))]
 
 
-@app.route("/api/asr", methods=["POST", "OPTIONS"])
+@app.route("/api/asr", methods=["POST", "OPTIONS", "GET"])
 def api_asr():
     if request.method == "OPTIONS":
         return _cors(jsonify(ok=True))
@@ -160,11 +190,38 @@ def api_asr():
     if _API_TOKEN and tok != _API_TOKEN:
         return _cors(jsonify(ok=False, error="unauthorized")), 401
 
+    # GET：免上传预检（只传哈希/文件名+大小，命中直接返回结果，不走上传）
+    if request.method == "GET":
+        h = (request.args.get("check") or "").strip()
+        nm = (request.args.get("name") or "").strip()
+        sz = (request.args.get("size") or "").strip()
+        cands = []
+        if h:
+            cands.append((os.path.join(_CACHE_DIR, h + ".json"), "hash"))
+        if nm and sz:
+            nh = _ni_get(nm, sz)
+            if nh:
+                cands.append((os.path.join(_CACHE_DIR, nh + ".json"), "name"))
+        for fp, via in cands:
+            if os.path.exists(fp):
+                try:
+                    with open(fp, "r", encoding="utf-8") as f:
+                        cached = json.load(f)
+                    cached["cached"] = True
+                    cached["via"] = via
+                    return _cors(jsonify(cached))
+                except Exception:
+                    pass
+        return _cors(jsonify(ok=False, miss=True))
+
     data = request.get_data()
     if not data or len(data) < 512:
         return _cors(jsonify(ok=False, error="no audio")), 400
     if len(data) > _MAX_BYTES:
         return _cors(jsonify(ok=False, error="audio too large")), 413
+
+    rq_name = (request.args.get("name") or "").strip()
+    rq_size = (request.args.get("size") or "").strip() or str(len(data))
 
     # 按音频内容哈希缓存：命中则直接返回，不再调用 AI
     audio_hash = hashlib.sha256(data).hexdigest()[:32]
@@ -174,6 +231,9 @@ def api_asr():
             with open(cache_fp, "r", encoding="utf-8") as f:
                 cached = json.load(f)
             cached["cached"] = True
+            cached["via"] = "hash"
+            if rq_name:
+                _ni_put(rq_name, rq_size, audio_hash)
             return _cors(jsonify(cached))
         except Exception:
             pass
@@ -206,6 +266,8 @@ def api_asr():
             _prune_cache()
         except Exception:
             pass
+        if rq_name:
+            _ni_put(rq_name, rq_size, audio_hash)
         return _cors(jsonify(result))
     except Exception as e:
         return _cors(jsonify(ok=False, error=str(e)[:160])), 500

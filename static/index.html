@@ -1851,23 +1851,58 @@ audioInput.addEventListener('change', function(){
 function asrUpload(file) {
   if (!file) return;
   if (file.size > 60 * 1024 * 1024) { resultEl.innerHTML = '<div class="card"><div class="err">文件过大（限 60MB）</div></div>'; return; }
-  resultEl.innerHTML = '<div class="card"><div class="empty">🎧 识别并翻译中…（首次较慢，请稍候）</div></div>';
-  var asrUrl = 'api/asr?' + 'token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
-  fetch(asrUrl, { method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/octet-stream'}, body: file })
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      if (!d.ok) { resultEl.innerHTML = '<div class="card"><div class="err">'+esc(d.error||'识别失败')+'</div></div>'; return; }
-      var segs = d.segments || [];
-      if (!segs.length) { resultEl.innerHTML = '<div class="card"><div class="empty">未识别到语音</div></div>'; return; }
-      var langTag = d.lang ? '（' + esc(d.lang === 'en' ? '英语' : d.lang === 'zh' ? '中文' : d.lang) + '）' : '';
-      var html = '<div class="card"><div class="sec-title" style="margin-top:0">🎵 语音翻译' + langTag + '</div>';
-      segs.forEach(function(g){
-        html += '<div style="margin:10px 0">' + (g.zh ? '<div style="font-size:15px;line-height:1.7">' + esc(g.zh) + '</div>' : '') + '<div style="font-size:12px;color:#8a94a6;line-height:1.5">' + esc(g.t) + '</div></div>';
+  var nm = file.name || '';
+  var sz = file.size || 0;
+  var base = 'api/asr?' + 'token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
+  function render(j) {
+    var segs = (j && j.segments) || [];
+    if (!segs.length) { resultEl.innerHTML = '<div class="card"><div class="empty">未识别到语音</div></div>'; return; }
+    var langTag = j.lang ? '（' + esc(j.lang === 'en' ? '英语' : j.lang === 'zh' ? '中文' : j.lang) + '）' : '';
+    var html = '<div class="card"><div class="sec-title" style="margin-top:0">🎵 语音翻译' + langTag + '</div>';
+    segs.forEach(function (g) {
+      html += '<div style="margin:10px 0">' + (g.zh ? '<div style="font-size:15px;line-height:1.7">' + esc(g.zh) + '</div>' : '') + '<div style="font-size:12px;color:#8a94a6;line-height:1.5">' + esc(g.t) + '</div></div>';
+    });
+    html += '</div>';
+    resultEl.innerHTML = html;
+  }
+  function upload() {
+    resultEl.innerHTML = '<div class="card"><div class="empty">🎧 识别并翻译中…（首次较慢，请稍候）</div></div>';
+    return fetch(base + '&name=' + encodeURIComponent(nm) + '&size=' + sz, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/octet-stream' }, body: file })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { resultEl.innerHTML = '<div class="card"><div class="err">' + esc(d.error || '识别失败') + '</div></div>'; return; }
+        if (window._trAsrKey) { try { localStorage.setItem('tr_asr_' + window._trAsrKey, JSON.stringify({ segments: d.segments || [], lang: d.lang })); } catch (e) {} }
+        render(d);
       });
-      html += '</div>';
-      resultEl.innerHTML = html;
-    })
-    .catch(function(){ resultEl.innerHTML = '<div class="card"><div class="err">上传失败，请重试</div></div>'; });
+  }
+  function go(key) {
+    window._trAsrKey = key || '';
+    if (key) {
+      try { var c = localStorage.getItem('tr_asr_' + key); if (c) { render(JSON.parse(c)); return; } } catch (e) {}
+    }
+    resultEl.innerHTML = '<div class="card"><div class="empty">🔎 检查服务器缓存…</div></div>';
+    var checkUrl = base + '&name=' + encodeURIComponent(nm) + '&size=' + sz + (key ? ('&check=' + key) : '');
+    fetch(checkUrl, { method: 'GET', credentials: 'same-origin' })
+      .then(function (r) { return r.json().catch(function () { return null; }); })
+      .then(function (j) {
+        if (j && j.ok && j.segments && j.segments.length) {
+          if (key) { try { localStorage.setItem('tr_asr_' + key, JSON.stringify({ segments: j.segments, lang: j.lang })); } catch (e) {} }
+          render(j); return null;
+        }
+        return upload();
+      })
+      .catch(function () { return upload(); })
+      .catch(function () { resultEl.innerHTML = '<div class="card"><div class="err">上传失败，请重试</div></div>'; });
+  }
+  try {
+    file.arrayBuffer().then(function (ab) {
+      crypto.subtle.digest('SHA-256', ab).then(function (h) {
+        var a = new Uint8Array(h), s2 = '';
+        for (var i = 0; i < 16; i++) s2 += ('0' + a[i].toString(16)).slice(-2);
+        go(s2);
+      }).catch(function () { go(''); });
+    }).catch(function () { go(''); });
+  } catch (e) { go(''); }
 }
 /* ===== 自绘文件浏览器（移植自 PDF阅读器） ===== */
 var fbCurrent = '', fbTab = 'type', fbOrder = 'time', fbAsc = false, fbTypeCache = null;
