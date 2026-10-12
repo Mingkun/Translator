@@ -6,6 +6,7 @@
 """
 import os
 import json
+import hashlib
 import tempfile
 import urllib.request
 
@@ -15,6 +16,26 @@ app = Flask(__name__)
 
 _MODEL = None
 _MAX_BYTES = 60 * 1024 * 1024  # 60MB 上限
+_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "asr_cache")
+try:
+    os.makedirs(_CACHE_DIR, exist_ok=True)
+except Exception:
+    pass
+
+
+def _prune_cache(max_files=800):
+    try:
+        files = [os.path.join(_CACHE_DIR, x) for x in os.listdir(_CACHE_DIR) if x.endswith(".json")]
+        if len(files) <= max_files:
+            return
+        files.sort(key=lambda p: os.path.getmtime(p))
+        for p in files[:len(files) - max_files]:
+            try:
+                os.remove(p)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 _API_TOKEN = os.environ.get("TRANSLATOR_API_TOKEN", "").strip()
 _DS_KEY = os.environ.get("DEEPSEEK_API_KEY", "").strip()
@@ -84,6 +105,18 @@ def api_asr():
     if len(data) > _MAX_BYTES:
         return _cors(jsonify(ok=False, error="audio too large")), 413
 
+    # 按音频内容哈希缓存：命中则直接返回，不再调用 AI
+    audio_hash = hashlib.sha256(data).hexdigest()[:32]
+    cache_fp = os.path.join(_CACHE_DIR, audio_hash + ".json")
+    if os.path.exists(cache_fp):
+        try:
+            with open(cache_fp, "r", encoding="utf-8") as f:
+                cached = json.load(f)
+            cached["cached"] = True
+            return _cors(jsonify(cached))
+        except Exception:
+            pass
+
     tmp = None
     try:
         fd, tmp = tempfile.mkstemp(suffix=".bin")
@@ -105,7 +138,14 @@ def api_asr():
                 zh = []
         for i, x in enumerate(segs):
             x["zh"] = zh[i] if i < len(zh) else ""
-        return _cors(jsonify(ok=True, lang=lang, segments=segs))
+        result = {"ok": True, "lang": lang, "segments": segs}
+        try:
+            with open(cache_fp, "w", encoding="utf-8") as f:
+                json.dump(result, f, ensure_ascii=False)
+            _prune_cache()
+        except Exception:
+            pass
+        return _cors(jsonify(result))
     except Exception as e:
         return _cors(jsonify(ok=False, error=str(e)[:160])), 500
     finally:
