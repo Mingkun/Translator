@@ -822,6 +822,34 @@ def api_lrc_cache():
                 return jsonify(ok=True, lrc=f.read(), source='cache')
         return jsonify(ok=False)
 
+@app.route("/api/diag", methods=["POST", "OPTIONS"])
+def api_diag():
+    """接收客户端上传的文件用于分析（token 校验），存到 data/diag/"""
+    if request.method == "OPTIONS":
+        r = jsonify(ok=True)
+        r.headers["Access-Control-Allow-Origin"] = "*"
+        r.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        r.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return r
+    try:
+        tok = (request.args.get("token") or "").strip()
+        expect = os.environ.get("TRANSLATOR_API_TOKEN", "").strip()
+        if expect and tok != expect:
+            return jsonify(ok=False, error="unauthorized"), 401
+        import re as _re, time as _time
+        name = (request.args.get("name") or "upload.bin").strip()
+        safe = _re.sub(r'[^\w\u4e00-\u9fff.\-\[\]() ]', '_', name)[:140] or "upload.bin"
+        data = request.get_data()
+        d = Path("/work/Translator/data/diag")
+        d.mkdir(parents=True, exist_ok=True)
+        fp = d / (_time.strftime("%Y%m%d_%H%M%S_") + safe)
+        fp.write_bytes(data)
+        r = jsonify(ok=True, saved=fp.name, size=len(data))
+        r.headers["Access-Control-Allow-Origin"] = "*"
+        return r
+    except Exception as e:
+        return jsonify(ok=False, error=str(e)[:150]), 500
+
 @app.after_request
 def _add_lrc_cors(resp):
     if request.path == '/api/lrc-lookup':
