@@ -182,6 +182,29 @@ def _translate(text_lines):
     return [memo.get(keys[i], "") for i in range(len(text_lines))]
 
 
+@app.route("/api/diag", methods=["POST", "OPTIONS"])
+def api_diag():
+    """接收客户端上传的文件用于分析，存到 data/diag/（与 ASR 同一服务，走同样的 nginx 精确匹配）"""
+    if request.method == "OPTIONS":
+        return _cors(jsonify(ok=True))
+    tok = (request.args.get("token") or "").strip()
+    if _API_TOKEN and tok != _API_TOKEN:
+        return _cors(jsonify(ok=False, error="unauthorized")), 401
+    try:
+        import re as _re
+        name = (request.args.get("name") or "upload.bin").strip()
+        safe = _re.sub(r'[^\w\u4e00-\u9fff.\-\[\]() ]', '_', name)[:140] or "upload.bin"
+        data = request.get_data()
+        d = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "diag")
+        os.makedirs(d, exist_ok=True)
+        fp = os.path.join(d, time.strftime("%Y%m%d_%H%M%S_") + safe)
+        with open(fp, "wb") as f:
+            f.write(data)
+        return _cors(jsonify(ok=True, saved=os.path.basename(fp), size=len(data)))
+    except Exception as e:
+        return _cors(jsonify(ok=False, error=str(e)[:150])), 500
+
+
 @app.route("/api/asr", methods=["POST", "OPTIONS", "GET"])
 def api_asr():
     if request.method == "OPTIONS":
