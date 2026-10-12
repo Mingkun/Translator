@@ -6,8 +6,11 @@
 """
 import os
 import json
+import time
+import sqlite3
 import hashlib
 import tempfile
+import threading
 import urllib.request
 
 from flask import Flask, request, jsonify
@@ -37,6 +40,53 @@ def _prune_cache(max_files=800):
     except Exception:
         pass
 
+
+# ── 翻译记忆库（持久化在服务器，按句子文本复用，跨音频生效） ──
+_TM_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "asr_tm.db")
+_tm_lock = threading.Lock()
+try:
+    with _tm_lock:
+        _c = sqlite3.connect(_TM_DB)
+        _c.execute("CREATE TABLE IF NOT EXISTS tm (h TEXT PRIMARY KEY, src TEXT, zh TEXT, ts INTEGER)")
+        _c.commit()
+        _c.close()
+except Exception:
+    pass
+
+
+def _tm_key(t):
+    return hashlib.sha1(t.strip().lower().encode("utf-8")).hexdigest()
+
+
+def _tm_get(keys):
+    out = {}
+    try:
+        with _tm_lock:
+            con = sqlite3.connect(_TM_DB)
+            cur = con.cursor()
+            for k in keys:
+                row = cur.execute("SELECT zh FROM tm WHERE h=?", (k,)).fetchone()
+                if row and row[0]:
+                    out[k] = row[0]
+            con.close()
+    except Exception:
+        pass
+    return out
+
+
+def _tm_put(pairs):
+    if not pairs:
+        return
+    try:
+        with _tm_lock:
+            con = sqlite3.connect(_TM_DB)
+            for k, src, zh in pairs:
+                con.execute("INSERT OR REPLACE INTO tm (h, src, zh, ts) VALUES (?,?,?,?)", (k, src, zh, int(time.time())))
+            con.commit()
+            con.close()
+    except Exception:
+        pass
+
 _API_TOKEN = os.environ.get("TRANSLATOR_API_TOKEN", "").strip()
 _DS_KEY = os.environ.get("DEEPSEEK_API_KEY", "").strip()
 
@@ -57,10 +107,15 @@ def _cors(resp):
 
 
 def _translate(text_lines):
-    """把编号的英文句子翻译成中文，返回同编号的中文列表"""
+    """把编号的英文句子翻译成中文，返回同编号的中文列表（先查服务器持久化翻译记忆）"""
     if not _DS_KEY or not text_lines:
         return []
-    numbered = "\n".join("%d. %s" % (i + 1, t) for i, t in enumerate(text_lines))
+    keys = [_tm_key(t) for t in text_lines]
+    memo = _tm_get(keys)
+    miss = [(i, text_lines[i]) for i in range(len(text_lines)) if keys[i] not in memo]
+    if not miss:
+        return [memo.get(keys[i], "") for i in range(len(text_lines))]
+    numbered = "\n".join("%d. %s" % (n + 1, t) for n, (_, t) in enumerate(miss))
     prompt = (
         "把下面英文语音识别结果逐句翻译成中文。"
         "保持编号格式，每行输出「编号. 中文翻译」，只输出译文，不要解释：\n" + numbered
@@ -79,7 +134,6 @@ def _translate(text_lines):
     with urllib.request.urlopen(req, timeout=60) as r:
         j = json.loads(r.read().decode())
     out = ((j.get("choices") or [{}])[0].get("message") or {}).get("content", "")
-    # 解析 "N. 译文"
     mapped = {}
     for line in out.split("\n"):
         line = line.strip()
@@ -88,7 +142,14 @@ def _translate(text_lines):
         dot = line.find(".")
         if dot > 0 and line[:dot].strip().isdigit():
             mapped[int(line[:dot].strip()) - 1] = line[dot + 1:].strip()
-    return [mapped.get(i, "") for i in range(len(text_lines))]
+    new_pairs = []
+    for n, (i, src) in enumerate(miss):
+        zh = mapped.get(n, "")
+        if zh:
+            memo[keys[i]] = zh
+            new_pairs.append((keys[i], src, zh))
+    _tm_put(new_pairs)
+    return [memo.get(keys[i], "") for i in range(len(text_lines))]
 
 
 @app.route("/api/asr", methods=["POST", "OPTIONS"])

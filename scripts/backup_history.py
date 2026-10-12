@@ -64,6 +64,26 @@ def sync_audio() -> int:
     return copied
 
 
+def sync_asr() -> int:
+    """同步 AI 翻译持久化数据：ASR 内容寻址缓存 + 翻译记忆库（asr_tm.db）。"""
+    copied = 0
+    src_dir = Path("/work/Translator/data/asr_cache")
+    dst_dir = DATA_DIR / "asr_cache"
+    if src_dir.is_dir():
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        for item in src_dir.glob("*.json"):
+            dst = dst_dir / item.name
+            if not dst.is_file():
+                shutil.copyfile(item, dst)
+                copied += 1
+    tm = Path("/work/Translator/data/asr_tm.db")
+    if tm.is_file():
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(tm, DATA_DIR / "asr_tm.db")
+        copied += 1
+    return copied
+
+
 def git_push() -> bool:
     stamp = time.strftime("%Y-%m-%d %H:%M")
     cmds = [
@@ -84,8 +104,9 @@ def main() -> int:
         count = export_history()
         snapshot_ok = export_cache_snapshot()
         audio_copied = sync_audio()
+        asr_copied = sync_asr()
         pushed = git_push()
-        print(f"导出历史 {count} 条; 快照 {'OK' if snapshot_ok else '失败'}; 音频同步 {audio_copied} 个; 推送 {'OK' if pushed else '失败'}")
+        print(f"导出历史 {count} 条; 快照 {'OK' if snapshot_ok else '失败'}; 音频同步 {audio_copied} 个; ASR缓存/记忆 {asr_copied} 个; 推送 {'OK' if pushed else '失败'}")
         return 0 if (snapshot_ok and pushed) else 1
     except Exception as exc:  # noqa: BLE001
         print("备份异常:", exc, file=sys.stderr)
