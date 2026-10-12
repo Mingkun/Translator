@@ -663,6 +663,11 @@ def api_lrc_lookup():
     # 先查缓存
     track = (request.args.get("track") or "").strip()
     artist = (request.args.get("artist") or "").strip()
+    # 剥掉下载器来源标签（[mqms2]/[flac] 等），否则会找不到/匹配错歌
+    import re as _rt
+    _tags = r'\s*\[(?:mqms\d*|qqmusic|flac|mp3|m4a|320k|hq|sq|ape|wav|ogg)\]\s*'
+    track = _rt.sub(_tags, ' ', track, flags=_rt.I).strip() or track
+    artist = _rt.sub(_tags, ' ', artist, flags=_rt.I).strip()
     if _looks_like_file(track):
         return jsonify(ok=False, error="not a song")
     try:
