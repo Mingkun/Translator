@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="翻译鹦鹉">
 <style>
+button, button *, .btn, .btn *, .tab, .tab * { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
   :root { --bg:#f7f9fc; --card:#ffffff; --text:#1f2630; --muted:#5a6472; --brand:#e8590c; --line:#dde4ec; }
   * { box-sizing: border-box; }
   html, body { height:100%; }
@@ -2793,6 +2794,7 @@ qEl.addEventListener('keydown', function(e){ if(e.key==='Enter' && (e.ctrlKey||e
   <div class="fbSearch" id="fbSearchBar"><input type="text" id="fbSearchInput" placeholder="🔍 输入文件名筛选…" oninput="fbFilterList()" /></div>
   <div class="fbList" id="fbList"></div>
 </div>
+<script>document.addEventListener('contextmenu',function(e){if(e.target.closest&&e.target.closest('button,.btn,.tab'))e.preventDefault();});</script>
 </body>
 </html>
 <style>textarea::placeholder{color:#8a94a6}</style>
