@@ -854,6 +854,44 @@ def api_lrc_cache():
                 return jsonify(ok=True, lrc=f.read(), source='cache')
         return jsonify(ok=False)
 
+@app.route("/api/lrc-offset", methods=["OPTIONS", "POST", "GET"])
+def api_lrc_offset():
+    """歌词手动校准偏移：POST 存 / GET 取（按 track+artist 键控，json 文件存 lrc_cache 目录）"""
+    import os as _os, hashlib as _hash, json as _json
+    if request.method == 'OPTIONS':
+        _r = jsonify(ok=True)
+        _r.headers['Access-Control-Allow-Origin'] = '*'
+        _r.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
+        return _r
+    cache_dir = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), 'lrc_cache')
+    _os.makedirs(cache_dir, exist_ok=True)
+    def _key(track, artist):
+        raw = (artist.lower() + '|' + track.lower()).encode('utf-8')
+        return _hash.md5(raw).hexdigest() + '.off.json'
+    track = (request.values.get('track') or '').strip()
+    artist = (request.values.get('artist') or '').strip()
+    if not track:
+        return jsonify(ok=False, error='missing track'), 400
+    fp = _os.path.join(cache_dir, _key(track, artist))
+    if request.method == 'POST':
+        try:
+            body = request.get_json(force=True, silent=True) or {}
+            off = float(body.get('offset', 0))
+            ratio = float(body.get('ratio', 1)) or 1
+            view = str(body.get('view', 'lrc'))[:8]
+        except Exception:
+            return jsonify(ok=False, error='bad body'), 400
+        with open(fp, 'w', encoding='utf-8') as f:
+            _json.dump({'offset': off, 'ratio': ratio, 'view': view, 'ts': int(__import__('time').time())}, f)
+        return jsonify(ok=True)
+    else:
+        if _os.path.exists(fp):
+            with open(fp, 'r', encoding='utf-8') as f:
+                d = _json.load(f)
+            return jsonify(ok=True, offset=d.get('offset', 0), ratio=d.get('ratio', 1), view=d.get('view', 'lrc'))
+        return jsonify(ok=False)
+
+
 @app.route("/api/diag", methods=["POST", "OPTIONS"])
 def api_diag():
     """接收客户端上传的文件用于分析（token 校验），存到 data/diag/"""
@@ -884,7 +922,7 @@ def api_diag():
 
 @app.after_request
 def _add_lrc_cors(resp):
-    if request.path == '/api/lrc-lookup':
+    if request.path == '/api/lrc-lookup' or request.path == '/api/lrc-offset':
         resp.headers['Access-Control-Allow-Origin'] = '*'
         resp.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
     return resp
