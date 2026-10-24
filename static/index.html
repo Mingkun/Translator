@@ -863,7 +863,7 @@ function newsShowDetail() {
 function newsApi(path) {
   return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth();
 }
-var NEWS_CATS = ['全部', '名人', '演讲', '播客', '科技', '经济', '国际', '政治', '健康', '生活', '体育', '日常'];
+var NEWS_CATS = ['全部', '华为', '名人', '演讲', '播客', '科技', '经济', '国际', '政治', '健康', '生活', '体育', '日常'];
 function newsRenderCats() {
   var box = document.getElementById('newsCats');
   if (!box) return;

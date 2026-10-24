@@ -18,7 +18,8 @@ CATEGORY_MAP = {
     'world': '国际', 'europe': '国际', 'americas': '国际', 'asia': '国际', 'middleeast': '国际', 'africa': '国际',
     'us': '国际',
 }
-CAT_ORDER = ['科技', '经济', '国际', '政治', '健康', '生活', '体育', '日常']
+CAT_ORDER = ['华为', '科技', '经济', '国际', '政治', '健康', '生活', '体育', '日常']
+HUAWEI_CAT = '华为'  # 每日必选一篇华为相关（无则顺延）
 PODCASTS = [
     ('CNN 5 Things', 'https://feeds.megaphone.fm/WMHY2007701094'),
 ]
@@ -26,6 +27,11 @@ PODCASTS = [
 
 def urlhash(u):
     return hashlib.sha1(u.encode('utf-8')).hexdigest()[:16]
+
+
+def is_huawei(title):
+    t = (title or '').lower()
+    return 'huawei' in t or '华为' in t
 
 
 def cat_of(u):
@@ -86,6 +92,63 @@ def extract(url):
         if total > 950:
             break
     return title, ' '.join(out)
+
+
+def gen_extract(html):
+    """通用正文抽取：去脚本/导航，收集 <p> 长段落，过滤页脚广告。"""
+    html = re.sub(r'<script.*?</script>|<style.*?</style>|<nav.*?</nav>|<footer.*?</footer>|<header.*?</header>|<aside.*?</aside>', ' ', html, flags=re.S | re.I)
+    ps = re.findall(r'<p[^>]*>(.*?)</p>', html, flags=re.S | re.I)
+    out = []
+    for p in ps:
+        t = re.sub(r'<[^>]+>', ' ', p)
+        for a, b in [('&nbsp;', ' '), ('&amp;', '&'), ('&#39;', "'"), ('&quot;', '"'), ('&lt;', '<'), ('&gt;', '>'), ('&rsquo;', "'"), ('&ldquo;', '"'), ('&rdquo;', '"'), ('&mdash;', '—')]:
+            t = t.replace(a, b)
+        t = re.sub(r'\s+', ' ', t).strip()
+        if len(t) < 60 or re.search(r'©|all rights reserved|subscribe|sign in|cookie|privacy|advertisement|follow us|terms of', t, re.I):
+            continue
+        out.append(t)
+    return ' '.join(out)[:9000]
+
+
+BROWSER_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+}
+
+
+def fetch_huawei_articles(have):
+    """Bing News RSS(美区英文) → 过滤标题含 huawei → 解析跳转 → 通用正文抽取。返回 [(url, title, text)]，每天至多1篇。"""
+    import html as H
+    try:
+        xml = fetch('https://www.bing.com/news/search?q=Huawei&format=rss&mkt=en-US&cc=US&setlang=en')
+    except Exception as e:
+        print('HUAWEI rss fail', str(e)[:50])
+        return []
+    items = re.findall(r'<item>\s*<title>(.*?)</title>.*?<link>(.*?)</link>.*?<pubDate>(.*?)</pubDate>', xml, re.S)
+    def _ar(t):
+        t = H.unescape(t)
+        return sum(1 for c in t if ord(c) < 128) / max(1, len(t))
+    cands = [(H.unescape(t), H.unescape(l), d) for t, l, d in items if 'huawei' in H.unescape(t).lower() and _ar(H.unescape(t)) > 0.8]
+    cands.sort(key=lambda x: x[2], reverse=True)
+    out, seen = [], set()
+    for title, link, _d in cands[:8]:
+        if len(out) >= 1:
+            break
+        try:
+            req = urllib.request.Request(link, headers=BROWSER_HEADERS)
+            with urllib.request.urlopen(req, timeout=20) as r:
+                final, html = r.url, r.read().decode('utf-8', 'ignore')
+            if final in have or final in seen:
+                continue
+            text = gen_extract(html)
+            if len(text) < 300:
+                continue
+            seen.add(final)
+            out.append((final, title, text))
+        except Exception:
+            continue
+    return out
 
 
 def tts(text, audio_path, meta_path):
@@ -223,6 +286,7 @@ def main():
     fetch_podcasts(conn)
     have = set(r[0] for r in conn.execute('SELECT url FROM news_items'))
     cands = [u for u in homepage_candidates() if u not in have]
+    # 华为定向：lite.cnn.com 搜索页 + 首页标题含 huawei 的文章，归入华为类
     by_cat = {}
     for u in cands:
         by_cat.setdefault(cat_of(u), []).append(u)
@@ -243,6 +307,22 @@ def main():
             break
     today = datetime.now().strftime('%Y-%m-%d')
     ok = 0
+    # 华为专题：每天一篇（Bing 美区 RSS → 跳转解析 → 通用正文抽取）
+    for hu, htitle, htext in fetch_huawei_articles(have):
+        try:
+            h = urlhash(hu)
+            ap, jp = NEWS / (h + '.mp3'), NEWS / (h + '.json')
+            if not (ap.is_file() and jp.is_file()):
+                tts(htext, str(ap), str(jp))
+            if not (ap.is_file() and ap.stat().st_size > 1000):
+                continue
+            conn.execute('INSERT OR IGNORE INTO news_items (date,title,category,url,text,created_at) VALUES (?,?,?,?,?,?)',
+                         (today, htitle, HUAWEI_CAT, hu, htext, time.time()))
+            conn.commit()
+            ok += 1
+            print('HUAWEI OK', htitle[:50])
+        except Exception as e:
+            print('HUAWEI fail', str(e)[:60])
     for u in picked:
         try:
             title, text = extract(u)
