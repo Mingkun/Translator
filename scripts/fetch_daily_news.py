@@ -117,39 +117,58 @@ BROWSER_HEADERS = {
 }
 
 
-def fetch_huawei_articles(have):
-    """Bing News RSS(美区英文) → 过滤标题含 huawei → 解析跳转 → 通用正文抽取。返回 [(url, title, text)]，每天至多1篇。"""
+def fetch_huawei_articles(have, max_items=5):
+    """Bing News RSS(美区英文) 多检索词合并 → 打分(官司/美国优先) → 解析跳转 → 通用抽取。每天至多 max_items 篇。"""
     import html as H
-    try:
-        xml = fetch('https://www.bing.com/news/search?q=Huawei&format=rss&mkt=en-US&cc=US&setlang=en')
-    except Exception as e:
-        print('HUAWEI rss fail', str(e)[:50])
-        return []
-    items = re.findall(r'<item>\s*<title>(.*?)</title>.*?<link>(.*?)</link>.*?<pubDate>(.*?)</pubDate>', xml, re.S)
+    LEGAL = r'lawsuit|litigation|court|trial|judge|jury|verdict|ruling|sue[sd]?|indict|plea|settlement|patent|sanction|export control|tariff|ban(ned)?|investigation|probe|DOJ|justice department|FCC|FBI|congress|senate'
+    US = r'\bU\.?S\.?\b|America|American|Washington|White House|Congress|Senate|House|Trump|Biden|Commerce Department|Pentagon|CIA|federal'
+    queries = ['Huawei lawsuit', 'Huawei US', 'Huawei court', 'Huawei sanctions', 'Huawei']
+    raw = []
+    for q in queries:
+        try:
+            xml = fetch('https://www.bing.com/news/search?q=' + urllib.parse.quote(q) + '&format=rss&mkt=en-US&cc=US&setlang=en')
+            raw.append(xml)
+        except Exception as e:
+            print('HUAWEI rss fail', q, str(e)[:40])
     def _ar(t):
         t = H.unescape(t)
         return sum(1 for c in t if ord(c) < 128) / max(1, len(t))
-    cands = [(H.unescape(t), H.unescape(l), d) for t, l, d in items if 'huawei' in H.unescape(t).lower() and _ar(H.unescape(t)) > 0.8]
-    cands.sort(key=lambda x: x[2], reverse=True)
-    out, seen = [], set()
-    for title, link, _d in cands[:8]:
-        if len(out) >= 1:
+    seen_title, cands = set(), []
+    for xml in raw:
+        for t, l, d in re.findall(r'<item>\s*<title>(.*?)</title>.*?<link>(.*?)</link>.*?<pubDate>(.*?)</pubDate>', xml, re.S):
+            title, link, pub = H.unescape(t), H.unescape(l), d
+            if 'huawei' not in title.lower() or _ar(title) <= 0.8:
+                continue
+            key = re.sub(r'[^a-z0-9 ]', '', title.lower())[:60]
+            if key in seen_title:
+                continue
+            seen_title.add(key)
+            tl = title.lower()
+            score = 0
+            score += 3 * len(re.findall(LEGAL, tl))
+            score += 2 * len(re.findall(US, title))
+            cands.append((score, pub, title, link))
+    cands.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    out, seen_url = [], set()
+    for _sc, _p, title, link in cands[:20]:
+        if len(out) >= max_items:
             break
         try:
             req = urllib.request.Request(link, headers=BROWSER_HEADERS)
             with urllib.request.urlopen(req, timeout=20) as r:
                 final, html = r.url, r.read().decode('utf-8', 'ignore')
-            if final in have or final in seen:
+            if final in have or final in seen_url:
                 continue
             text = gen_extract(html)
             if len(text) < 300:
                 continue
-            seen.add(final)
+            seen_url.add(final)
             out.append((final, title, text))
+            tag = '官司/美国' if _sc > 0 else '一般'
+            print('HUAWEI 候选[%s score=%d] %s' % (tag, _sc, title[:52]))
         except Exception:
             continue
     return out
-
 
 def tts(text, audio_path, meta_path):
     import edge_tts
