@@ -16,8 +16,8 @@ button, button *, .btn, .btn *, .tab, .tab * { -webkit-user-select:none; user-se
   html, body { height:100%; }
   body { margin:0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background:var(--bg); color:var(--text); }
   .wrap { max-width: 720px; margin: 0 auto; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
-  @media (max-width:520px){ /*v-newsfs 手机端新闻弹窗全屏*/
-    #newsCard { position:fixed !important; inset:0 !important; width:100vw !important; height:100% !important; max-height:none !important; border-radius:0 !important; padding:10px 12px calc(10px + env(safe-area-inset-bottom)) !important; box-sizing:border-box !important; }
+  @media (max-width:520px){ /*v-newsfs 手机端全部弹窗全屏：新闻/口译/系统/登录/影视/历史*/
+    #newsCard, #interpCard, #sysCard, #loginCard, #movieCard, #historyCard { position:fixed !important; inset:0 !important; width:100vw !important; height:100% !important; max-height:none !important; border-radius:0 !important; padding:10px 12px calc(10px + env(safe-area-inset-bottom)) !important; box-sizing:border-box !important; }
   }
   header { display:flex; align-items:center; gap:10px; margin-bottom:14px; -webkit-user-select:none; user-select:none; }
   header .logo { font-size:30px; }
@@ -131,7 +131,7 @@ button, button *, .btn, .btn *, .tab, .tab * { -webkit-user-select:none; user-se
     <input type="file" id="audioInput" accept="audio/*" style="display:none">
   </div>
   <div id="interpOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
-  <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
+  <div id="interpCard" style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
     <div style="display:flex;justify-content:flex-end;align-items:center;margin-bottom:6px;">
       <button type="button" id="interpClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
     </div>
@@ -155,7 +155,7 @@ button, button *, .btn, .btn *, .tab, .tab * { -webkit-user-select:none; user-se
   </div>
 </div>
 <div id="sysOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
-  <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:16px;max-height:calc(100vh - 48px);overflow-y:auto;-webkit-overflow-scrolling:touch;">
+  <div id="sysCard" style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:16px;max-height:calc(100vh - 48px);overflow-y:auto;-webkit-overflow-scrolling:touch;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
       <strong style="font-size:15px">⚙ 系统</strong>
       <button type="button" id="sysClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
@@ -286,7 +286,7 @@ button, button *, .btn, .btn *, .tab, .tab * { -webkit-user-select:none; user-se
   </div>
 </div>
 <div id="loginOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3000;align-items:center;justify-content:center;">
-  <div style="width:min(340px,88vw);background:#fff;border-radius:14px;padding:20px;box-shadow:0 8px 32px rgba(15,23,42,.25)">
+  <div id="loginCard" style="width:min(340px,88vw);background:#fff;border-radius:14px;padding:20px;box-shadow:0 8px 32px rgba(15,23,42,.25)">
     <div style="text-align:center;margin-bottom:14px"><span style="font-size:38px">🦜</span><div style="font-size:16px;font-weight:600;color:#1f2630;margin-top:4px">翻译鹦鹉 · 用户登录</div></div>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #c4d0e8;border-radius:10px;font-size:15px;margin-bottom:10px;outline:none">
     <input type="password" id="loginPass" placeholder="密码" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #c4d0e8;border-radius:10px;font-size:15px;margin-bottom:14px;outline:none">
@@ -296,7 +296,7 @@ button, button *, .btn, .btn *, .tab, .tab * { -webkit-user-select:none; user-se
   </div>
 </div>
 <div id="movieOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
-  <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
+  <div id="movieCard" style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
       <strong style="font-size:15px">🎬</strong>
       <div style="display:flex;gap:6px;align-items:center;">
@@ -309,7 +309,7 @@ button, button *, .btn, .btn *, .tab, .tab * { -webkit-user-select:none; user-se
   </div>
 </div>
 <div id="historyOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;align-items:center;justify-content:center;">
-    <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
+    <div id="historyCard" style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
         <strong style="font-size:15px">🕘</strong>
         <button type="button" id="histSort" style="border:1px solid #c7d0dc;background:#fff;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;color:#5a6472">排序：时间</button>
