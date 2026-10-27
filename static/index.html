@@ -16,6 +16,9 @@ button, button *, .btn, .btn *, .tab, .tab * { -webkit-user-select:none; user-se
   html, body { height:100%; }
   body { margin:0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background:var(--bg); color:var(--text); }
   .wrap { max-width: 720px; margin: 0 auto; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
+  @media (max-width:520px){ /*v-newsfs 手机端新闻弹窗全屏*/
+    #newsCard { position:fixed !important; inset:0 !important; width:100vw !important; height:100% !important; max-height:none !important; border-radius:0 !important; padding:10px 12px calc(10px + env(safe-area-inset-bottom)) !important; box-sizing:border-box !important; }
+  }
   header { display:flex; align-items:center; gap:10px; margin-bottom:14px; -webkit-user-select:none; user-select:none; }
   header .logo { font-size:30px; }
   @keyframes parrotWiggle {
@@ -261,7 +264,7 @@ button, button *, .btn, .btn *, .tab, .tab * { -webkit-user-select:none; user-se
 </div>
   
 <div id="newsOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2100;align-items:center;justify-content:center;">
-  <div style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
+  <div id="newsCard" style="width:min(380px,calc(100vw - 32px));background:#fff;border-radius:12px;padding:14px;max-height:calc(70vh + 80px);display:flex;flex-direction:column;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
       <strong style="font-size:15px">📰 每日新闻</strong>
       <button type="button" id="newsClose" style="border:none;background:none;font-size:22px;cursor:pointer;color:#5a6472;line-height:1">×</button>
