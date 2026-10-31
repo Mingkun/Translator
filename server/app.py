@@ -892,6 +892,16 @@ def api_lrc_offset():
         return jsonify(ok=False)
 
 
+@app.route("/api/ping", methods=["GET", "OPTIONS"])
+def api_ping():
+    """心跳保活端点：轻量响应，保持客户端-服务器网络连接活跃。"""
+    if request.method == "OPTIONS":
+        r = jsonify(ok=True)
+        r.headers["Access-Control-Allow-Origin"] = "*"
+        return r
+    import time as _t
+    return jsonify(ok=True, ts=int(_t.time() * 1000), server="translator")
+
 @app.route("/api/diag", methods=["POST", "OPTIONS"])
 def api_diag():
     """接收客户端上传的文件用于分析（token 校验），存到 data/diag/"""

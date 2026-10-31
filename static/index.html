@@ -260,6 +260,26 @@ button, button *, .btn, .btn *, .tab, .tab * { -webkit-user-select:none; user-se
       </div>
       <div id="trUpInfo" style="font-size:12px;color:#5a6472;border-top:1px dashed #e3e8ef;padding:8px 0 10px"></div>
     </div>
+    <div style="font-size:13px;color:var(--muted);font-weight:600;margin:14px 2px 6px">💓 心跳保活</div>
+    <div style="background:#f6f8fb;border:1px solid #e3e8ef;border-radius:10px;padding:10px 12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0 6px">
+        <span style="font-size:13px;">定期向服务器握手，保持网络连接</span>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="hbEnable" style="width:18px;height:18px;cursor:pointer">
+          <span style="font-size:13px;font-weight:600" id="hbLabel">关</span>
+        </label>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+        <span style="font-size:12px;color:#5a6472">频率</span>
+        <select id="hbFreq" style="border:1px solid #c7d0dc;border-radius:6px;padding:4px 8px;font-size:12px;background:#fff;cursor:pointer;font-family:inherit">
+          <option value="30">30 秒</option>
+          <option value="60" selected>1 分钟</option>
+          <option value="120">2 分钟</option>
+          <option value="300">5 分钟</option>
+        </select>
+        <span id="hbStatus" style="font-size:11px;color:#90a4ae;margin-left:auto"></span>
+      </div>
+    </div>
   </div>
 </div>
   
@@ -1726,6 +1746,68 @@ if (document.getElementById('iosPwaBtn')) document.getElementById('iosPwaBtn').a
   alert('iPhone 使用方法：\n1. 用 Safari 打开 https://5130599.best/Translator/\n2. 点底部“分享”按钮（方框+向上箭头）\n3. 选“添加到主屏幕”\n即可像 App 一样全屏使用，带鹦鹉图标');
 });
 document.getElementById('sysClose').addEventListener('click', function () { sysOverlay.style.display = 'none'; });
+
+// ===== 心跳保活 =====
+(function () {
+  var hbTimer = null;
+  var hbEnable = document.getElementById('hbEnable');
+  var hbFreq = document.getElementById('hbFreq');
+  var hbLabel = document.getElementById('hbLabel');
+  var hbStatus = document.getElementById('hbStatus');
+
+  function hbLoad() {
+    try {
+      var cfg = JSON.parse(localStorage.getItem('tr_heartbeat') || '{}');
+      hbEnable.checked = !!cfg.on;
+      if (cfg.freq) hbFreq.value = String(cfg.freq);
+    } catch (e) {}
+    hbUpdateLabel();
+  }
+
+  function hbSave() {
+    try {
+      localStorage.setItem('tr_heartbeat', JSON.stringify({ on: hbEnable.checked, freq: parseInt(hbFreq.value) || 60 }));
+    } catch (e) {}
+  }
+
+  function hbUpdateLabel() {
+    if (hbLabel) hbLabel.textContent = hbEnable.checked ? '开' : '关';
+    if (hbEnable.checked) {
+      hbStart();
+    } else {
+      hbStop();
+    }
+  }
+
+  function hbPing() {
+    var t0 = Date.now();
+    fetch('api/ping?ts=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (hbStatus) hbStatus.textContent = '✓ ' + (Date.now() - t0) + 'ms';
+      })
+      .catch(function () {
+        if (hbStatus) hbStatus.textContent = '✗ 连接失败';
+      });
+  }
+
+  function hbStart() {
+    hbStop();
+    var freq = parseInt(hbFreq.value) || 60;
+    hbPing();
+    hbTimer = setInterval(hbPing, freq * 1000);
+    if (hbStatus) hbStatus.textContent = '每 ' + freq + ' 秒';
+  }
+
+  function hbStop() {
+    if (hbTimer) { clearInterval(hbTimer); hbTimer = null; }
+    if (hbStatus) hbStatus.textContent = '';
+  }
+
+  if (hbEnable) hbEnable.addEventListener('change', function () { hbSave(); hbUpdateLabel(); });
+  if (hbFreq) hbFreq.addEventListener('change', function () { hbSave(); if (hbEnable.checked) hbStart(); });
+  hbLoad();
+})();
 sysOverlay.addEventListener('click', function (e) { if (e.target === sysOverlay) sysOverlay.style.display = 'none'; });
 function render(d){
   if(!d.ok){ resultEl.innerHTML='<div class="card"><div class="err">'+esc(d.error||'翻译失败')+'</div></div>'; return; }
