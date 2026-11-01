@@ -209,6 +209,10 @@ button, button *, .btn, .btn *, .tab, .tab * { -webkit-user-select:none; user-se
       <span style="font-size:12px;">循环播放</span>
       <button type="button" id="playLoop" style="border:1px solid var(--line);background:#fff;color:var(--text);border-radius:20px;padding:4px 18px;font-size:13px;cursor:pointer">关</button>
     </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px dashed var(--line);">
+      <span style="font-size:12px;">打开新闻自动朗读</span>
+      <button type="button" id="newsAutoRead" style="border:1px solid var(--line);background:#fff;color:var(--text);border-radius:20px;padding:4px 18px;font-size:13px;cursor:pointer">关</button>
+    </div>
     </div>
     <div style="font-size:13px;color:var(--muted);font-weight:600;margin:14px 2px 6px">📈 行情设置</div>
     <div style="background:#f6f8fb;border:1px solid var(--line);border-radius:12px;padding:2px 14px">
@@ -973,7 +977,7 @@ function newsLoadDetail(id) {
         newsPageStart.push(fi0 >= 0 ? newsWT[fi0] : null);
       }
       newsClearHi();
-      newsStartAudio();
+      if (newsAutoRead) newsStartAudio();   // 默认不自动朗读；设置→播放设置→打开新闻自动朗读 可开启
     })
     .catch(function () { newsDetailBody.innerHTML = '<div style="color:#b02a37;font-size:13px;text-align:center;padding:16px">加载失败</div>'; });
 }
@@ -1712,6 +1716,17 @@ function updateLoopUI() {
 }
 updateLoopUI();
 updatePlayModeUI();
+var newsAutoRead = localStorage.getItem('tr_newsAutoRead') === '1';
+if (document.getElementById('newsAutoRead')) document.getElementById('newsAutoRead').addEventListener('click', function () { newsAutoRead = !newsAutoRead; localStorage.setItem('tr_newsAutoRead', String(newsAutoRead)); updateNewsAutoReadUI(); });
+function updateNewsAutoReadUI() {
+  var b = document.getElementById('newsAutoRead');
+  if (!b) return;
+  b.textContent = newsAutoRead ? '开' : '关';
+  b.style.background = newsAutoRead ? '#e8590c' : '#fff';
+  b.style.color = newsAutoRead ? '#fff' : 'var(--text)';
+  b.style.borderColor = newsAutoRead ? '#e8590c' : 'var(--line)';
+}
+updateNewsAutoReadUI();
 document.getElementById('sysBtn').addEventListener('click', function () { sysOverlay.style.display = 'flex'; fitOverlays(); });
 function trLoadVer() {
   fetch('downloads/translator-version.json?t=' + Date.now())
