@@ -64,28 +64,24 @@ def _volc_voice_for(voice):
     return None
 
 def _tts_split_chunks(text, limit=190):
-    """把长文本按句子边界切成 <=limit 字符的块（v1.11: 修复 volc 200 字截断——长段只读一半）。"""
+    """v1.11b: 修复句子顺序错乱——去掉短句合并逻辑，每句独占一块，超长句按空格硬切。"""
     import re as _re
     if len(text) <= limit:
         return [text]
     parts = _re.split(r'(?<=[.!?。！？;；])\s*', text)
-    chunks, cur = [], ''
+    chunks = []
     for part in parts:
-        while len(part) > limit:   # 单句超长按空格硬切
+        part = part.strip()
+        if not part:
+            continue
+        while len(part) > limit:
             cut = part.rfind(' ', 0, limit)
             if cut < limit // 2:
                 cut = limit
             chunks.append(part[:cut].strip())
             part = part[cut:].strip()
-        if not part:
-            continue
-        if cur and len(cur) + 1 + len(part) > limit:
-            chunks.append(cur)
-            cur = part
-        else:
-            cur = (cur + ' ' + part).strip() if cur else part
-    if cur:
-        chunks.append(cur)
+        if part:
+            chunks.append(part)
     return [c for c in chunks if c]
 
 
