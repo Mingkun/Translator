@@ -1906,7 +1906,56 @@ function translate(){
       if (!cached || !cached.ok) resultEl.innerHTML = '<div class="card"><div class="err">网络错误，请重试</div></div>';
     });
 }
-document.getElementById('go').addEventListener('click', translate);
+/* v1.12: 长按翻译↔播放切换；播放模式=展示原文+TTS，不翻译 */
+var goMode = localStorage.getItem('tr_goMode') === 'play' ? 'play' : 'translate';
+var goHoldTimer = null, goSuppressClick = false;
+function goUpdateUI() {
+  var b = document.getElementById('go');
+  if (!b) return;
+  b.textContent = goMode === 'play' ? '播放' : '翻译';
+  b.style.background = goMode === 'play' ? '#7048a8' : '';
+  b.title = '长按切换 翻译/播放';
+}
+function goToggle() {
+  goMode = goMode === 'play' ? 'translate' : 'play';
+  localStorage.setItem('tr_goMode', goMode);
+  goUpdateUI();
+  try { navigator.vibrate(80); } catch (e) {}
+}
+(function () {
+  var b = document.getElementById('go');
+  function hold() {
+    goSuppressClick = false;
+    goHoldTimer = setTimeout(function () {
+      goHoldTimer = null;
+      goSuppressClick = true;
+      goToggle();
+    }, 550);
+  }
+  function cancel() { if (goHoldTimer) { clearTimeout(goHoldTimer); goHoldTimer = null; } }
+  ['touchstart', 'mousedown'].forEach(function (ev) { b.addEventListener(ev, hold, { passive: true }); });
+  ['touchend', 'touchmove', 'touchcancel', 'mouseup', 'mouseleave'].forEach(function (ev) { b.addEventListener(ev, cancel, { passive: true }); });
+  b.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+})();
+function playOnly() {
+  var q = qEl.value.trim();
+  if (!q) { resultEl.innerHTML = ''; return; }
+  var lang = q.charCodeAt(0) < 256 ? 'en' : 'zh';
+  var url = histPlayUrl(q, lang);
+  var html = '<div class="card">';
+  html += '<div style="display:flex;align-items:flex-start;gap:10px">';
+  html += '<div style="flex:1;min-width:0"><div style="font-size:10.5px;color:#7048a8;font-weight:700;margin-bottom:3px">播放内容（未翻译）</div>';
+  html += '<div class="trans-main">' + twWrap(q) + '</div></div>';
+  html += '<button type="button" class="speak" style="flex-shrink:0;margin-top:16px;font-size:20px" onclick="new Audio(\'' + url + '\').play()">🔊</button></div>';
+  html += '</div>';
+  resultEl.innerHTML = html;
+  try { var a = new Audio(url); a.play().catch(function () {}); } catch (e) {}
+}
+document.getElementById('go').addEventListener('click', function () {
+  if (goSuppressClick) { goSuppressClick = false; return; }
+  if (goMode === 'play') playOnly(); else translate();
+});
+goUpdateUI();
 if (document.getElementById('logoBtn')) document.getElementById('logoBtn').addEventListener('click', function () {
   var el = this;
   el.classList.remove('parrot-wiggle');
@@ -2903,7 +2952,7 @@ if (document.getElementById('mgrRefresh')) document.getElementById('mgrRefresh')
 setInterval(function () { if (trUserToken) fetch(newsApi('api/user/me')).catch(function () {}); }, 60000);
 if (trUserToken) refreshMe();
 updateMgrUI();
-qEl.addEventListener('keydown', function(e){ if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) translate(); });
+qEl.addEventListener('keydown', function(e){ if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) { if (goMode === 'play') playOnly(); else translate(); } });
 </script>
 <div id="fileBrowser">
   <div class="fbHeader">
