@@ -1824,15 +1824,30 @@ document.getElementById('sysClose').addEventListener('click', function () { sysO
   hbLoad();
 })();
 sysOverlay.addEventListener('click', function (e) { if (e.target === sysOverlay) sysOverlay.style.display = 'none'; });
-function render(d){
+function render(d, origQuery){
   if(!d.ok){ resultEl.innerHTML='<div class="card"><div class="err">'+esc(d.error||'翻译失败')+'</div></div>'; return; }
+  var origText = (origQuery || '').trim();
+  var det = (d.detected || '').toLowerCase();
+  var srcLang = det.indexOf('zh') === 0 ? 'zh' : (det.indexOf('en') === 0 ? 'en' : (origText.charCodeAt(0) < 256 ? 'en' : 'zh'));
+  var dstLang = srcLang === 'en' ? 'zh' : 'en';
+  var dstAudio = dstLang === 'en' ? (d.audio_en || histPlayUrl(d.translation, 'en')) : (d.audio_zh || histPlayUrl(d.translation, 'zh'));
+  var srcAudio = origText ? (srcLang === 'en' ? (d.audio_en || histPlayUrl(origText, 'en')) : (d.audio_zh || histPlayUrl(origText, 'zh'))) : '';
   var html = '<div class="card">';
-  html += '<div class="trans-main">' + twWrap(d.translation) + '</div>';
+  /* v1.11: 译文在前，带播放 */
+  html += '<div style="display:flex;align-items:flex-start;gap:10px">';
+  html += '<div style="flex:1;min-width:0"><div style="font-size:10.5px;color:#7048a8;font-weight:700;margin-bottom:3px">译文</div>';
+  html += '<div class="trans-main">' + twWrap(d.translation) + '</div></div>';
+  html += '<button type="button" class="speak" style="flex-shrink:0;margin-top:16px;font-size:20px" onclick="new Audio(\'' + dstAudio + '\').play()">🔊</button></div>';
+  /* v1.11: 原文在后，带播放 */
+  if (origText) {
+    html += '<div style="border-top:1px dashed #e3e8ef;margin:10px 0"></div>';
+    html += '<div style="display:flex;align-items:flex-start;gap:10px">';
+    html += '<div style="flex:1;min-width:0"><div style="font-size:10.5px;color:#8a94a6;font-weight:700;margin-bottom:3px">原文</div>';
+    html += '<div style="font-size:15px;line-height:1.6;color:#5a6472">' + twWrap(origText) + '</div></div>';
+    if (srcAudio) html += '<button type="button" class="speak" style="flex-shrink:0;margin-top:16px;font-size:16px" onclick="new Audio(\'' + srcAudio + '\').play()">🔊</button>';
+    html += '</div>';
+  }
   if (d.term) html += '<div class="phonetic-row"><span>' + twWrap(d.term) + (d.phonetic ? ' /' + esc(d.phonetic) + '/' : '') + '</span></div>';
-  var btns = [];
-  btns.push('<span style="font-size:12px">英文</span>' + audioBtn(d.audio_en || ''));
-  if (d.audio_zh) btns.push('<span style="font-size:12px">中文</span>' + audioBtn(d.audio_zh));
-  html += '<div style="display:flex;align-items:center;gap:14px;margin-top:4px">' + btns.join('') + '</div>';
   if (d.meanings && d.meanings.length) {
     html += '<div class="sec-title">常用含义</div>';
     d.meanings.forEach(function(m){
@@ -1853,9 +1868,9 @@ function render(d){
   }
   html += '</div>';
   resultEl.innerHTML = html;
-  if (d.ok && d.audio_en && d.audio_en !== lastAutoPlayUrl) {
-    lastAutoPlayUrl = d.audio_en;
-    var autoAudio = new Audio(d.audio_en);
+  if (d.ok && dstAudio && dstAudio !== lastAutoPlayUrl) {   /* v1.11: 自动朗读译文 */
+    lastAutoPlayUrl = dstAudio;
+    var autoAudio = new Audio(dstAudio);
     autoAudio.play().catch(function(){});
   }
 }
@@ -1864,7 +1879,7 @@ function translate(){
   if(!q) return;
   var cached = cacheLoad(q);
   if (cached && cached.ok) {
-    render(cached);
+    render(cached, q);
     resultEl.insertAdjacentHTML('afterbegin', '<div style="font-size:11px;color:#8a94a6;text-align:center;padding:2px 0 6px">缓存</div>');
   } else {
     resultEl.innerHTML = '<div class="card"><div class="empty">翻译中…</div></div>';
@@ -1872,7 +1887,7 @@ function translate(){
   var ft = fromTo();
   fetch('api/translate?q=' + encodeURIComponent(q) + '&from=' + ft[0] + '&to=' + ft[1] + '&token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth())
     .then(function(r){ return r.json(); })
-    .then(function(d){ if (d.ok) cacheSave(q, d); render(d); })
+    .then(function(d){ if (d.ok) cacheSave(q, d); render(d, q); })
     .catch(function(){
       if (!cached || !cached.ok) resultEl.innerHTML = '<div class="card"><div class="err">网络错误，请重试</div></div>';
     });
