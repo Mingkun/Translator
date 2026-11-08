@@ -2615,7 +2615,7 @@ function histEnterTranslate(item) {
   histStopSelAudio();
   historyOverlay.style.display = 'none';
   qEl.value = item.getAttribute('data-q') || '';
-  translate();
+  if (goMode === 'play') playOnly(); else translate();   // v1.11: 朗读模式下进入历史条目走分段朗读
 }
 var histChain = 0;
 function histPlaySound(url, onDone) {
