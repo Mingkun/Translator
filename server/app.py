@@ -943,9 +943,10 @@ def api_tts():
         abort(401)
     text = (request.args.get("text") or "").strip()
     lang = request.args.get("lang") or "en"
+    lang = {"zh": "zh-CN"}.get(lang, lang)   # v1.11: 兼容页面发来的 zh（朗读模式）
     voice = (request.args.get("voice") or "").strip()
     rate = (request.args.get("rate") or "").strip()
-    if not text or lang not in {"en", "zh-CN"} or len(text) > 200:
+    if not text or lang not in {"en", "zh-CN"} or len(text) > 2000:   # v1.11: 200→2000，支持朗读模式整段文本
         abort(400)
     if voice and voice not in {"en-US-GuyNeural", "en-US-ChristopherNeural", "en-US-EricNeural", "en-US-AndrewNeural", "en-US-AriaNeural", "en-US-JennyNeural", "zh-CN-YunxiNeural", "zh-CN-YunyangNeural", "zh-CN-XiaoxiaoNeural", "zh-CN-XiaoyiNeural"}:
         abort(400)
