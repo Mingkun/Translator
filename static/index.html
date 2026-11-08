@@ -1847,8 +1847,8 @@ function render(d, origQuery){
   var det = (d.detected || '').toLowerCase();
   var srcLang = det.indexOf('zh') === 0 ? 'zh' : (det.indexOf('en') === 0 ? 'en' : (origText.charCodeAt(0) < 256 ? 'en' : 'zh'));
   var dstLang = srcLang === 'en' ? 'zh' : 'en';
-  var dstAudio = dstLang === 'en' ? (d.audio_en || histPlayUrl(d.translation, 'en')) : (d.audio_zh || histPlayUrl(d.translation, 'zh'));
-  var srcAudio = origText ? (srcLang === 'en' ? (d.audio_en || histPlayUrl(origText, 'en')) : (d.audio_zh || histPlayUrl(origText, 'zh'))) : '';
+  var dstAudio = histPlayUrl(d.translation, dstLang);   /* v1.11: 始终用客户端 histPlayUrl（带用户音色偏好），服务端 audio_zh/en 无 voice 参数会落到默认英文声 */
+  var srcAudio = origText ? histPlayUrl(origText, srcLang) : '';
   var html = '<div class="card">';
   /* v1.11: 译文在前，带播放 */
   html += '<div style="display:flex;align-items:flex-start;gap:10px">';
