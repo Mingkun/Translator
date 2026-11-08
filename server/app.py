@@ -63,7 +63,43 @@ def _volc_voice_for(voice):
         return cfg.get('female_speaker') or None
     return None
 
+def _tts_split_chunks(text, limit=190):
+    """把长文本按句子边界切成 <=limit 字符的块（v1.11: 修复 volc 200 字截断——长段只读一半）。"""
+    import re as _re
+    if len(text) <= limit:
+        return [text]
+    parts = _re.split(r'(?<=[.!?。！？;；])\s*', text)
+    chunks, cur = [], ''
+    for part in parts:
+        while len(part) > limit:   # 单句超长按空格硬切
+            cut = part.rfind(' ', 0, limit)
+            if cut < limit // 2:
+                cut = limit
+            chunks.append(part[:cut].strip())
+            part = part[cut:].strip()
+        if not part:
+            continue
+        if cur and len(cur) + 1 + len(part) > limit:
+            chunks.append(cur)
+            cur = part
+        else:
+            cur = (cur + ' ' + part).strip() if cur else part
+    if cur:
+        chunks.append(cur)
+    return [c for c in chunks if c]
+
+
 def _volc_tts_bytes(text, speaker, rate=""):
+    chunks = _tts_split_chunks(text)
+    if len(chunks) <= 1:
+        return _volc_tts_one(text, speaker, rate)
+    out = []
+    for ch in chunks:
+        out.append(_volc_tts_one(ch, speaker, rate))
+    return b''.join(out)
+
+
+def _volc_tts_one(text, speaker, rate=""):
     import time as _time
     cfg = _volc_cfg()
     headers = {'Content-Type': 'application/json', 'X-Api-Key': cfg['api_key'], 'X-Api-Resource-Id': 'seed-tts-2.0'}
@@ -966,7 +1002,11 @@ def api_tts():
                 return Response(data, mimetype="audio/mpeg")
             except Exception:
                 pass
-        data = engine.tts_bytes(text, lang, voice, rate)
+        # v1.11: engine(edge-tts) 也有 180 字截断（translate.py text[:180]），同样分块合成再拼接
+        _parts = []
+        for _ch in _tts_split_chunks(text):
+            _parts.append(engine.tts_bytes(_ch, lang, voice, rate))
+        data = b''.join(_parts)
         return Response(data, mimetype="audio/mpeg")
     except Exception:
         abort(502)
