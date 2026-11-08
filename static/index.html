@@ -1889,6 +1889,7 @@ function render(d, origQuery){
   }
 }
 function translate(){
+  try { rdStop(); } catch (e) {}
   var q = qEl.value.trim();
   if(!q) return;
   var cached = cacheLoad(q);
@@ -1937,19 +1938,60 @@ function goToggle() {
   ['touchend', 'touchmove', 'touchcancel', 'mouseup', 'mouseleave'].forEach(function (ev) { b.addEventListener(ev, cancel, { passive: true }); });
   b.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 })();
+/* v1.11: 朗读模式——按换行分段逐段读，小字体，连读+当前段高亮 */
+var rdSegUrls = [];
+var rdAudio = null;
+function rdStop() {
+  try { if (rdAudio) { rdAudio.pause(); rdAudio = null; } } catch (e) {}
+  document.querySelectorAll('.rdRow').forEach(function (r) { r.style.background = ''; });
+}
+function rdPlay(i, chain) {
+  rdStop();
+  if (i < 0 || i >= rdSegUrls.length) return;
+  rdAudio = new Audio(rdSegUrls[i]);
+  var row = document.getElementById('rdRow' + i);
+  if (row) row.style.background = 'rgba(112,72,168,.07)';
+  rdAudio.onended = function () {
+    if (row) row.style.background = '';
+    if (chain && i + 1 < rdSegUrls.length) rdPlay(i + 1, true);
+    else { rdAudio = null; var b = document.getElementById('rdAll'); if (b) { b.textContent = '▶ 全部连读'; } }
+  };
+  rdAudio.onerror = function () { if (row) row.style.background = ''; };
+  rdAudio.play().catch(function () { if (row) row.style.background = ''; });
+}
 function playOnly() {
+  rdStop();
   var q = qEl.value.trim();
   if (!q) { resultEl.innerHTML = ''; return; }
-  var lang = q.charCodeAt(0) < 256 ? 'en' : 'zh';
-  var url = histPlayUrl(q, lang);
+  var segs = q.split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean);
+  rdSegUrls = segs.map(function (seg) {
+    var lang = seg.charCodeAt(0) < 256 ? 'en' : 'zh';
+    return histPlayUrl(seg, lang);
+  });
   var html = '<div class="card">';
-  html += '<div style="display:flex;align-items:flex-start;gap:10px">';
-  html += '<div style="flex:1;min-width:0"><div style="font-size:10.5px;color:#7048a8;font-weight:700;margin-bottom:3px">朗读内容（未翻译）</div>';
-  html += '<div class="trans-main">' + twWrap(q) + '</div></div>';
-  html += '<button type="button" class="speak" style="flex-shrink:0;margin-top:16px;font-size:20px" onclick="new Audio(\'' + url + '\').play()">🔊</button></div>';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">';
+  html += '<span style="font-size:10.5px;color:#7048a8;font-weight:700">朗读内容（未翻译）· ' + segs.length + ' 段</span>';
+  if (segs.length > 1) html += '<button type="button" id="rdAll" style="border:1px solid #c7d0dc;background:#fff;color:#7048a8;border-radius:14px;padding:3px 12px;font-size:11.5px;cursor:pointer">▶ 全部连读</button>';
+  html += '</div>';
+  segs.forEach(function (seg, i) {
+    html += '<div class="rdRow" id="rdRow' + i + '" style="display:flex;align-items:flex-start;gap:8px;padding:6px 4px;border-bottom:1px dashed #eef1f5;border-radius:8px">';
+    html += '<span style="font-size:10px;color:#b8c2cf;flex-shrink:0;padding-top:3px">' + (i + 1) + '</span>';
+    html += '<div style="flex:1;min-width:0;font-size:13px;line-height:1.65;color:#3a4451;white-space:pre-wrap;word-break:break-word">' + esc(seg) + '</div>';
+    html += '<button type="button" class="speak" data-rd="' + i + '" style="flex-shrink:0;font-size:14px;padding:2px 6px">🔊</button>';
+    html += '</div>';
+  });
   html += '</div>';
   resultEl.innerHTML = html;
-  try { var a = new Audio(url); a.play().catch(function () {}); } catch (e) {}
+  resultEl.querySelectorAll('[data-rd]').forEach(function (btn) {
+    btn.addEventListener('click', function () { rdPlay(+btn.getAttribute('data-rd'), false); });
+  });
+  var allBtn = document.getElementById('rdAll');
+  if (allBtn) allBtn.addEventListener('click', function () {
+    if (rdAudio) { rdStop(); allBtn.textContent = '▶ 全部连读'; return; }
+    allBtn.textContent = '⏸ 连读中…';
+    rdPlay(0, true);
+  });
+  rdPlay(0, false);   // 进朗读模式自动读第一段
 }
 document.getElementById('go').addEventListener('click', function () {
   if (goSuppressClick) { goSuppressClick = false; return; }
