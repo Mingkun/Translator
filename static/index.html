@@ -2837,6 +2837,12 @@ historyList.addEventListener('click', function (e) {
   if (!item) return;
   if (histDragged) { histDragged = false; return; }
   if (histSwipeOpen) { histSwipeClose(); return; }
+  var hq = item.getAttribute('data-q') || '';
+  if (hq.indexOf('\n') >= 0) {   // v1.11: 含换行的朗读历史 → 直接进入分段朗读/翻译
+    histSwipeClose();
+    histEnterTranslate(item);
+    return;
+  }
   histClicks++;
   if (histClicks === 1) {
     histListClickTimer = setTimeout(function () { histListClickTimer = null; histClicks = 0; histSelectPlay(item, 1); }, 300);
