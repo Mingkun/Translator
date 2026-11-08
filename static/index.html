@@ -213,6 +213,10 @@ button, button *, .btn, .btn *, .tab, .tab * { -webkit-user-select:none; user-se
       <span style="font-size:12px;">打开新闻自动朗读</span>
       <button type="button" id="newsAutoRead" style="border:1px solid var(--line);background:#fff;color:var(--text);border-radius:20px;padding:4px 18px;font-size:13px;cursor:pointer">关</button>
     </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
+      <span style="font-size:12px;">翻译后自动朗读</span>
+      <button type="button" id="transAutoRead" style="border:1px solid var(--line);background:#e8590c;color:#fff;border-radius:20px;padding:4px 18px;font-size:13px;cursor:pointer">开</button>
+    </div>
     </div>
     <div style="font-size:13px;color:var(--muted);font-weight:600;margin:14px 2px 6px">📈 行情设置</div>
     <div style="background:#f6f8fb;border:1px solid var(--line);border-radius:12px;padding:2px 14px">
@@ -1717,6 +1721,15 @@ function updateLoopUI() {
 updateLoopUI();
 updatePlayModeUI();
 var newsAutoRead = localStorage.getItem('tr_newsAutoRead') === '1';
+var transAutoRead = localStorage.getItem('tr_transAutoRead') !== '0';   // 翻译后自动朗读译文，默认开
+if (document.getElementById('transAutoRead')) document.getElementById('transAutoRead').addEventListener('click', function () { transAutoRead = !transAutoRead; localStorage.setItem('tr_transAutoRead', String(transAutoRead)); updateTransAutoReadUI(); });
+function updateTransAutoReadUI() {
+  var b = document.getElementById('transAutoRead');
+  if (!b) return;
+  b.textContent = transAutoRead ? '开' : '关';
+  b.style.background = transAutoRead ? '#e8590c' : '#fff';
+  b.style.color = transAutoRead ? '#fff' : 'var(--text)';
+}
 if (document.getElementById('newsAutoRead')) document.getElementById('newsAutoRead').addEventListener('click', function () { newsAutoRead = !newsAutoRead; localStorage.setItem('tr_newsAutoRead', String(newsAutoRead)); updateNewsAutoReadUI(); });
 function updateNewsAutoReadUI() {
   var b = document.getElementById('newsAutoRead');
@@ -1727,6 +1740,7 @@ function updateNewsAutoReadUI() {
   b.style.borderColor = newsAutoRead ? '#e8590c' : 'var(--line)';
 }
 updateNewsAutoReadUI();
+updateTransAutoReadUI();
 document.getElementById('sysBtn').addEventListener('click', function () { sysOverlay.style.display = 'flex'; fitOverlays(); });
 function trLoadVer() {
   fetch('downloads/translator-version.json?t=' + Date.now())
@@ -1868,7 +1882,7 @@ function render(d, origQuery){
   }
   html += '</div>';
   resultEl.innerHTML = html;
-  if (d.ok && dstAudio && dstAudio !== lastAutoPlayUrl) {   /* v1.11: 自动朗读译文 */
+  if (transAutoRead && d.ok && dstAudio && dstAudio !== lastAutoPlayUrl) {   /* v1.11: 自动朗读译文；设置→播放设置→翻译后自动朗读 可关 */
     lastAutoPlayUrl = dstAudio;
     var autoAudio = new Audio(dstAudio);
     autoAudio.play().catch(function(){});
