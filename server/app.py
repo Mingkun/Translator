@@ -430,6 +430,19 @@ def api_history():
     return jsonify(ok=True, **engine.load_history(ut, limit, offset, sort, filter_str))
 
 
+@app.post("/api/history/add")
+def api_history_add():
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    payload = request.get_json(silent=True) or {}
+    q = str(payload.get("q") or "").strip()
+    if not q or len(q) > 2000:
+        return jsonify(ok=False, error="文本为空或过长（限 2000 字）"), 400
+    ut = str(payload.get("ut") or request.args.get("ut") or "")
+    engine.record_history(q, ut)
+    return jsonify(ok=True)
+
+
 @app.post("/api/history/delete")
 def api_history_delete():
     if not _authorized():

@@ -1992,6 +1992,13 @@ function playOnly() {
     rdPlay(0, true);
   });
   rdPlay(0, false);   // 进朗读模式自动读第一段
+  try {   // v1.11: 朗读内容入历史，文字+音频（TTS缓存）可重复使用
+    fetch('api/history/add?token=' + encodeURIComponent(window.API_TOKEN || ''), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: q, ut: trUserToken || '' })
+    }).catch(function () {});
+  } catch (e) {}
 }
 document.getElementById('go').addEventListener('click', function () {
   if (goSuppressClick) { goSuppressClick = false; return; }

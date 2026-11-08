@@ -635,7 +635,7 @@ HISTORY_MAX_ROWS = 50000
 
 def record_history(q: str, user_token: str = "") -> None:
     q = q.strip()
-    if not q or len(q) > 500:
+    if not q or len(q) > 2000:   # v1.11: 500→2000，朗读模式整段入历史
         return
     user = user_by_token(user_token)
     if not user:
