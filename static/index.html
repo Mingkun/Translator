@@ -1912,9 +1912,9 @@ var goHoldTimer = null, goSuppressClick = false;
 function goUpdateUI() {
   var b = document.getElementById('go');
   if (!b) return;
-  b.textContent = goMode === 'play' ? '播放' : '翻译';
+  b.textContent = goMode === 'play' ? '朗读' : '翻译';
   b.style.background = goMode === 'play' ? '#7048a8' : '';
-  b.title = '长按切换 翻译/播放';
+  b.title = '长按切换 翻译/朗读';
 }
 function goToggle() {
   goMode = goMode === 'play' ? 'translate' : 'play';
@@ -1944,7 +1944,7 @@ function playOnly() {
   var url = histPlayUrl(q, lang);
   var html = '<div class="card">';
   html += '<div style="display:flex;align-items:flex-start;gap:10px">';
-  html += '<div style="flex:1;min-width:0"><div style="font-size:10.5px;color:#7048a8;font-weight:700;margin-bottom:3px">播放内容（未翻译）</div>';
+  html += '<div style="flex:1;min-width:0"><div style="font-size:10.5px;color:#7048a8;font-weight:700;margin-bottom:3px">朗读内容（未翻译）</div>';
   html += '<div class="trans-main">' + twWrap(q) + '</div></div>';
   html += '<button type="button" class="speak" style="flex-shrink:0;margin-top:16px;font-size:20px" onclick="new Audio(\'' + url + '\').play()">🔊</button></div>';
   html += '</div>';
