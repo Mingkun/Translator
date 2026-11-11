@@ -404,6 +404,27 @@ def api_user_list():
     return jsonify(ok=True, users=engine.users_list())
 
 
+@app.route("/api/user-settings", methods=["GET", "OPTIONS", "POST"])
+def api_user_settings():
+    """配置项按客户持久化到后台：GET 全量读取，POST 单项写入（ut 鉴权）。"""
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    if request.method == "POST":
+        payload = request.get_json(silent=True) or {}
+        u = engine.user_by_token(str(payload.get("ut") or ""))
+        if not u:
+            return jsonify(ok=False, error="未登录"), 401
+        if not engine.user_settings_set(
+            u["id"], str(payload.get("key") or ""), str(payload.get("value") or "")
+        ):
+            return jsonify(ok=False, error="参数错误"), 400
+        return jsonify(ok=True)
+    u = engine.user_by_token(request.args.get("ut") or "")
+    if not u:
+        return jsonify(ok=False, error="未登录"), 401
+    return jsonify(ok=True, settings=engine.user_settings_get(u["id"]))
+
+
 @app.get("/api/history")
 def api_history():
     if not _authorized():

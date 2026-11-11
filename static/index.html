@@ -217,6 +217,10 @@ button, button *, .btn, .btn *, .tab, .tab * { -webkit-user-select:none; user-se
       <span style="font-size:12px;">翻译后自动朗读</span>
       <button type="button" id="transAutoRead" style="border:1px solid var(--line);background:#e8590c;color:#fff;border-radius:20px;padding:4px 18px;font-size:13px;cursor:pointer">开</button>
     </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px dashed var(--line);">
+      <span style="font-size:12px;">翻译后自动朗读英文</span>
+      <button type="button" id="transAutoReadEn" style="border:1px solid var(--line);background:#e8590c;color:#fff;border-radius:20px;padding:4px 18px;font-size:13px;cursor:pointer">开</button>
+    </div>
     </div>
     <div style="font-size:13px;color:var(--muted);font-weight:600;margin:14px 2px 6px">📈 行情设置</div>
     <div style="background:#f6f8fb;border:1px solid var(--line);border-radius:12px;padding:2px 14px">
@@ -1733,6 +1737,16 @@ function updateTransAutoReadUI() {
   b.style.background = transAutoRead ? '#e8590c' : '#fff';
   b.style.color = transAutoRead ? '#fff' : 'var(--text)';
 }
+var transAutoReadEn = localStorage.getItem('tr_transAutoReadEn') !== '0';   // 英译中时接着朗读英文原文，默认开
+if (document.getElementById('transAutoReadEn')) document.getElementById('transAutoReadEn').addEventListener('click', function () { transAutoReadEn = !transAutoReadEn; localStorage.setItem('tr_transAutoReadEn', String(transAutoReadEn)); updateTransAutoReadEnUI(); });
+function updateTransAutoReadEnUI() {
+  var b = document.getElementById('transAutoReadEn');
+  if (!b) return;
+  b.textContent = transAutoReadEn ? '开' : '关';
+  b.style.background = transAutoReadEn ? '#e8590c' : '#fff';
+  b.style.color = transAutoReadEn ? '#fff' : 'var(--text)';
+}
+updateTransAutoReadEnUI();
 if (document.getElementById('newsAutoRead')) document.getElementById('newsAutoRead').addEventListener('click', function () { newsAutoRead = !newsAutoRead; localStorage.setItem('tr_newsAutoRead', String(newsAutoRead)); updateNewsAutoReadUI(); });
 function updateNewsAutoReadUI() {
   var b = document.getElementById('newsAutoRead');
@@ -1889,6 +1903,12 @@ function render(d, origQuery){
     lastAutoPlayUrl = dstAudio;
     var autoAudio = new Audio(dstAudio);
     autoAudio.play().catch(function(){});
+    if (transAutoReadEn && srcLang === 'en' && srcAudio) {   /* 英译中：译文读完后接着朗读英文原文（设置→播放设置→翻译后自动朗读英文） */
+      autoAudio.addEventListener('ended', function () {
+        var enAudio = new Audio(srcAudio);
+        enAudio.play().catch(function () {});
+      });
+    }
   }
 }
 function translate(){
@@ -2926,6 +2946,46 @@ function showLogin(msg) {
 }
 function hideLogin() { document.getElementById('loginOverlay').style.display = 'none'; }
 function userAuth() { return trUserToken ? ('&ut=' + encodeURIComponent(trUserToken)) : ''; }
+/* 配置项按客户持久化到后台：改动即推送；打开/登录时拉取，远端为准（后台为空则上传本机现有配置） */
+var TR_SYNC_KEYS = ['tr_transAutoRead', 'tr_transAutoReadEn', 'tr_newsAutoRead', 'tr_voiceGender', 'ttsRate', 'tr_playbackMode', 'tr_playbackCount', 'tr_playbackLoop', 'tr_quoteOn', 'tr_quoteCode', 'tr_quoteInterval', 'tr_heartbeat', 'tr_goMode'];
+var _trRawSetItem = localStorage.setItem.bind(localStorage);
+function trPushSetting(key, value) {
+  if (!trUserToken) return;
+  try {
+    fetch(newsApi('api/user-settings'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ut: trUserToken, key: key, value: String(value) })
+    }).catch(function () {});
+  } catch (e) {}
+}
+function trSyncSettings() {
+  if (!trUserToken) return;
+  fetch(newsApi('api/user-settings')).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok) return;
+    var remote = d.settings || {};
+    var remoteCount = TR_SYNC_KEYS.filter(function (k) { return remote[k] !== undefined && remote[k] !== null; }).length;
+    if (!remoteCount) {
+      TR_SYNC_KEYS.forEach(function (k) { var v = localStorage.getItem(k); if (v !== null) trPushSetting(k, v); });
+      return;
+    }
+    var changed = false;
+    TR_SYNC_KEYS.forEach(function (k) {
+      if (remote[k] !== undefined && remote[k] !== null && localStorage.getItem(k) !== String(remote[k])) {
+        _trRawSetItem(k, String(remote[k]));
+        changed = true;
+      }
+    });
+    if (changed) location.reload();   /* 远端为准；应用后刷新一次，下次拉取无差异不再刷新 */
+  }).catch(function () {});
+}
+try {   /* 拦截配置写入：本地保存的同时推送到后台 */
+  localStorage.setItem = function (k, v) {
+    _trRawSetItem(k, v);
+    if (TR_SYNC_KEYS.indexOf(k) >= 0) trPushSetting(k, v);
+  };
+} catch (e) {}
+trSyncSettings();
 function updateUserInfo() {
   var el = document.getElementById('userName');
   if (el) el.textContent = trUsername || '未登录';
@@ -2951,6 +3011,7 @@ function updateUserInfo() {
       localStorage.setItem('tr_isManager', d.is_manager ? '1' : '0');
       updateUserInfo();
       hideLogin();
+      trSyncSettings();   /* 登录成功后同步后台配置（首次登录会把本机配置上传） */
       if (typeof historyOverlay !== 'undefined' && historyOverlay && historyOverlay.style.display !== 'none') loadHistoryPage();
     }).catch(function () { msg.textContent = '网络错误'; });
   });

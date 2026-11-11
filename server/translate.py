@@ -588,6 +588,38 @@ def user_by_token(token: str):
     return {"id": row[0], "username": row[1], "is_manager": bool(row[2])}
 
 
+_USER_SETTINGS_TABLE = (
+    "CREATE TABLE IF NOT EXISTS user_settings ("
+    "user_id INTEGER NOT NULL, skey TEXT NOT NULL, svalue TEXT, "
+    "PRIMARY KEY (user_id, skey))"
+)
+
+
+def user_settings_get(user_id: int) -> dict:
+    """按客户读取持久化到后台的配置项。"""
+    with _users_db() as conn:
+        conn.execute(_USER_SETTINGS_TABLE)
+        rows = conn.execute(
+            "SELECT skey, svalue FROM user_settings WHERE user_id = ?", (int(user_id),)
+        ).fetchall()
+    return {str(k): str(v) for k, v in rows}
+
+
+def user_settings_set(user_id: int, key: str, value: str) -> bool:
+    """按客户写入/更新单个配置项（重复 key 覆盖）。"""
+    key = (key or "").strip()
+    if not key or len(key) > 64:
+        return False
+    with _users_db() as conn:
+        conn.execute(_USER_SETTINGS_TABLE)
+        conn.execute(
+            "INSERT INTO user_settings (user_id, skey, svalue) VALUES (?, ?, ?) "
+            "ON CONFLICT(user_id, skey) DO UPDATE SET svalue = excluded.svalue",
+            (int(user_id), key, str(value)[:512]),
+        )
+    return True
+
+
 def _history_db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=15)
