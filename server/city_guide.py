@@ -382,9 +382,10 @@ def get_guide(city: str, refresh: bool = False) -> dict:
         data["ok"] = True
         data["ai"] = True
 
-    if not data["ok"] and not data["summary"]:
-        return data
-
+    if not data["ok"]:
+        return data   # 不缓存失败结果
+    if not data.get("ai"):
+        return data   # LLM 增强未成功：不落 30 天长缓存，下次请求重试（避免降级攻略被长期缓存）
     _write_cache(city, data)
     return data
 
@@ -398,7 +399,7 @@ LLM_SYSTEM = (
 
 
 def _llm_json(system: str, user: str, max_tokens: int = 8192):
-    """调大模型并返回解析后的 JSON。DeepSeek 主 → zai GLM 备。失败返回 None。
+    """调大模型并返回解析后的 JSON。zai GLM-5.3 主（DeepSeek 已欠费 402 摘除，2026-11-11）。失败返回 None。
 
     总预算 36 秒（gunicorn 工作进程 60 秒超时，App 取数也有限时）。
     """
@@ -410,21 +411,13 @@ def _llm_json(system: str, user: str, max_tokens: int = 8192):
 
     payload_base = {
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-        # 注意：deepseek-flash 是推理模型，开 json_object 时推理会吃掉预算、content 返回空串；
-        # 因此不开 response_format，靠提示词约束 + 本地 JSON 提取。
+        # 靠提示词约束 JSON 输出 + 本地 JSON 提取（与翻译慢通道同风格）
         "temperature": 0.3,
         "max_tokens": max_tokens,
+        # GLM-5.3 是思考模型，攻略是素材聚合任务：关思考省下推理时间（实测开思考时 60s 超时）
+        "thinking": {"type": "disabled"},
     }
     attempts = []
-    # deepseek-chat 是非推理模型：秒回、不占推理预算（实测 3 秒 vs 推理模型 16 秒）；
-    # 失败再退到推理模型 deepseek-flash，最后 GLM。
-    try:
-        dk = engine._deepseek_key()
-        if dk:
-            attempts.append(("https://api.deepseek.com/chat/completions", "deepseek-chat", dk))
-            attempts.append(("https://api.deepseek.com/chat/completions", "deepseek-flash", dk))
-    except Exception:
-        pass
     try:
         zk = engine._zai_key()
         if zk:
@@ -437,9 +430,6 @@ def _llm_json(system: str, user: str, max_tokens: int = 8192):
             break
         body = dict(payload_base)
         body["model"] = model
-        # 非推理模型给足就行；推理模型需要 8192，否则推理会吃掉全部预算
-        if model.endswith("flash"):
-            body["max_tokens"] = max(int(body.get("max_tokens") or 0), 8192)
         try:
             req = urllib.request.Request(
                 url, data=json.dumps(body).encode(), method="POST",
@@ -509,12 +499,7 @@ def _build_guide_prompt(city: str, raw: dict, limit: int = 12) -> str:
 
 
 def _llm_guide(city: str, raw: dict):
-    """把抓取到的零散素材交给大模型整合成结构化攻略。
-
-    deepseek-flash 是推理模型：推理过程会占掉大量 token（实测 5-6k），
-    max_tokens 给小了会得到 finish_reason=length、content 为空 → 必须给足 8192。
-    首次失败时用更精简的素材再试一次。
-    """
+    """把抓取到的零散素材交给大模型整合成结构化攻略。首次失败时用更精简的素材再试一次。"""
     for limit, mt in ((12, 8192), (6, 8192)):
         j = _llm_json(LLM_SYSTEM, _build_guide_prompt(city, raw, limit), max_tokens=mt)
         out = _normalize_guide(j)
