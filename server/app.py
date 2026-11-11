@@ -178,14 +178,19 @@ app.add_url_rule("/parrot_squawk.mp3", "parrot_squawk", _serve_static_file("parr
 
 
 def _translate_with_cache(q: str, sl: str, tl: str, ut: str = "") -> dict:
-    """完整响应级缓存：查过的词直接秒回；大小写不敏感命中。"""
+    """响应级缓存：完整结果(resp:)秒回；快速结果(respf:)次之；都没有走快速通道构建。"""
     cache_key = f"resp:{sl}:{tl}:{q.strip().lower()}"
     cached = engine.cache_get(cache_key)
     if isinstance(cached, dict) and cached.get("ok"):
         engine.record_history(q, ut)
-        return {**cached, "query": q}
-    result = build_translation(q, sl, tl)
-    engine.cache_set(cache_key, result)
+        return {**cached, "query": q, "detail_pending": False}
+    fast_key = f"respf:{sl}:{tl}:{q.strip().lower()}"
+    fast_cached = engine.cache_get(fast_key)
+    if isinstance(fast_cached, dict) and fast_cached.get("ok"):
+        engine.record_history(q, ut)
+        return {**fast_cached, "query": q}
+    result = build_translation(q, sl, tl, engine_result=engine.smart_translate_fast(q, sl=sl, tl=tl))
+    engine.cache_set(fast_key, result)
     engine.record_history(q, ut)
     return result
 
@@ -232,8 +237,36 @@ def api_translate():
         return jsonify(ok=False, error=f"translate failed: {exc}"), 502
 
 
-def build_translation(q: str, sl: str, tl: str) -> dict:
-    result = engine.smart_translate(q, sl=sl, tl=tl)
+@app.get("/api/translate-detail")
+def api_translate_detail():
+    """词典详情慢通道：完整生成例句/影视台词，供前端在快速译文上屏后异步补齐。"""
+    if not _authorized():
+        return jsonify(ok=False, error="unauthorized"), 401
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify(ok=False, error="empty query"), 400
+    sl = request.args.get("from") or "auto"
+    tl = request.args.get("to") or ""
+    cache_key = f"resp:{sl}:{tl}:{q.strip().lower()}"
+    cached = engine.cache_get(cache_key)
+    if isinstance(cached, dict) and cached.get("ok"):
+        return jsonify({**cached, "query": q, "detail_pending": False})
+    try:
+        result = build_translation(q, sl, tl)
+        engine.cache_set(cache_key, result)
+        _save_movie_quotes(q, result)
+        return jsonify({**result, "detail_pending": False})
+    except Exception as exc:  # noqa: BLE001
+        return jsonify(ok=False, error=f"translate failed: {exc}"), 502
+
+
+def build_translation(q: str, sl: str, tl: str, engine_result: dict | None = None) -> dict:
+    """构建响应；engine_result 可传入引擎结果（快速通道或缓存），否则走完整链。"""
+    result = (
+        engine_result
+        if isinstance(engine_result, dict) and engine_result.get("translation")
+        else engine.smart_translate(q, sl=sl, tl=tl)
+    )
     detected = result.get("detected") or sl
     translation = result.get("translation") or ""
     if not tl:
@@ -295,6 +328,7 @@ def build_translation(q: str, sl: str, tl: str) -> dict:
         "translation": translation,
         "term": term,
         "phonetic": phonetic,
+        "detail_pending": bool(result.get("detail_pending")),
         "audio_en": audio_en,
         "audio_zh": audio_zh,
         "meanings": result.get("meanings", []),

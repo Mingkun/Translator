@@ -1925,7 +1925,21 @@ function translate(){
   var ft = fromTo();
   fetch('api/translate?q=' + encodeURIComponent(q) + '&from=' + ft[0] + '&to=' + ft[1] + '&token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth())
     .then(function(r){ return r.json(); })
-    .then(function(d){ if (d.ok) cacheSave(q, d); render(d, q); })
+    .then(function(d){
+      if (d.ok) cacheSave(q, d);
+      render(d, q);
+      if (d.ok && d.detail_pending) {   /* 快速译文已上屏，异步补齐词典详情（例句/影视台词） */
+        fetch('api/translate-detail?q=' + encodeURIComponent(q) + '&from=' + ft[0] + '&to=' + ft[1] + '&token=' + encodeURIComponent(window.API_TOKEN || '') + userAuth())
+          .then(function(r2){ return r2.json(); })
+          .then(function(d2){
+            if (!d2.ok || qEl.value.trim() !== q) return;   /* 用户已改词则丢弃 */
+            cacheSave(q, d2);
+            render(d2, q);
+            resultEl.insertAdjacentHTML('afterbegin', '<div style="font-size:11px;color:#8a94a6;text-align:center;padding:2px 0 6px">词典已补全</div>');
+          })
+          .catch(function(){});
+      }
+    })
     .catch(function(){
       if (!cached || !cached.ok) resultEl.innerHTML = '<div class="card"><div class="err">网络错误，请重试</div></div>';
     });

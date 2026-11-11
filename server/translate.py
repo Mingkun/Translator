@@ -347,20 +347,11 @@ def dict_fast(q: str) -> dict:
 
 
 def smart_translate(q: str, sl: str = "auto", tl: str = "") -> dict:
-    """引擎链：deepseek → glm-5.3 → glm-5.1 → deepseek重试×2 → google → 报错。"""
+    """引擎链（慢通道，词典全量）：glm-5.3 → glm-5.1 → google → 报错；DeepSeek 已欠费（402）摘除。"""
     cache_key = f"smart5:{sl}:{tl}:{q.strip().lower()}"
     cached = _cache_get(cache_key)
     if cached:
         return cached
-
-    def _try_deepseek() -> dict | None:
-        try:
-            r = deepseek_full(q)
-            if r and r.get("detected", "").startswith("zh"):
-                r["detected"] = "zh-CN"
-            return r
-        except Exception:
-            return None
 
     def _try_glm(model: str) -> dict | None:
         try:
@@ -372,22 +363,12 @@ def smart_translate(q: str, sl: str = "auto", tl: str = "") -> dict:
             return None
 
     result = None
-    # 1) DeepSeek 首轮
-    result = _try_deepseek()
-    # 2) GLM-5.3
-    if result is None:
-        result = _try_glm("glm-5.3")
-    # 3) GLM-5.1
+    # 1) GLM-5.3
+    result = _try_glm("glm-5.3")
+    # 2) GLM-5.1
     if result is None:
         result = _try_glm("glm-5.1")
-    # 4) DeepSeek 重试2次（带退避）
-    if result is None:
-        for attempt in range(2):
-            time.sleep(2.0 + attempt * 2.0)
-            result = _try_deepseek()
-            if result:
-                break
-    # 5) Google 兜底
+    # 3) Google 兜底
     if result is None:
         global _GOOGLE_RATE_LIMITED_UNTIL
         if time.time() > _GOOGLE_RATE_LIMITED_UNTIL:
@@ -735,6 +716,133 @@ def load_history(user_token: str = "", limit: int = 50, offset: int = 0, sort: s
             ).fetchall()
     items = [{"q": r[0], "created_at": r[1]} for r in rows]
     return {"total": total, "items": items}
+
+_FAST_WORD_RE = re.compile(r"^[A-Za-z][A-Za-z'-]{0,29}$")
+
+_FAST_SYSTEM_PROMPT = (
+    '你是中英互译引擎，只输出 JSON：{"translation":"译文","detected":"en 或 zh-CN"}。不要解释，不要词典内容。'
+)
+
+
+def glm_fast(q: str) -> dict | None:
+    """快速通道：GLM-5.3 关思考、只出译文+语言检测（实测单词约 1.2s）。"""
+    key = _zai_key()
+    if not key:
+        return None
+    payload = json.dumps(
+        {
+            "model": "glm-5.3",
+            "messages": [
+                {"role": "system", "content": _FAST_SYSTEM_PROMPT},
+                {"role": "user", "content": q},
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.2,
+            "max_tokens": 800,
+            "thinking": {"type": "disabled"},
+        }
+    ).encode()
+    req = urllib.request.Request(
+        "https://api.z.ai/api/coding/paas/v4/chat/completions",
+        data=payload,
+        method="POST",
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}", "User-Agent": UA},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    content = str((data.get("choices") or [{}])[0].get("message", {}).get("content") or "")
+    parsed = _extract_json_object(content)
+    if parsed is None:
+        raise RuntimeError("glm_fast json parse failed")
+    translation = str(parsed.get("translation") or "").strip()
+    if not translation:
+        return None
+    return {"translation": translation, "detected": str(parsed.get("detected") or "").strip() or "en"}
+
+
+def youdao_dict(q: str) -> dict | None:
+    """有道词典秒回层：英文单词返回音标+中文释义（实测约 0.05s）。"""
+    word = q.strip()
+    if not _FAST_WORD_RE.match(word):
+        return None
+    try:
+        req = urllib.request.Request(
+            "https://dict.youdao.com/jsonapi?q=" + urllib.parse.quote(word),
+            headers={"User-Agent": UA},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            d = json.loads(resp.read().decode("utf-8"))
+        ec = (d.get("ec") or {}).get("word") or []
+        if not ec:
+            return None
+        w = ec[0]
+        phonetic = str(w.get("usphone") or w.get("ukphone") or "").strip()
+        meanings: list[dict] = []
+        for tr in (w.get("trs") or [])[:6]:
+            i = ((tr.get("tr") or [{}])[0].get("l") or {}).get("i")
+            if not i:
+                continue
+            text = "".join(i) if isinstance(i, list) else str(i)
+            text = text.strip()
+            pos = ""
+            for head in ("adj.", "adv.", "vt.", "vi.", "n.", "v.", "prep.", "conj.", "pron.", "int."):
+                if text.startswith(head):
+                    pos = head
+                    text = text[len(head):].strip()
+                    break
+            if text:
+                meanings.append({"pos": pos, "definition": "", "zh": text})
+        if not phonetic and not meanings:
+            return None
+        return {"phonetic": phonetic, "meanings": meanings}
+    except Exception:
+        return None
+
+
+def smart_translate_fast(q: str, sl: str = "auto", tl: str = "") -> dict:
+    """快速通道：引擎级全量缓存命中→直接用；否则 GLM 快速译文 + 有道词典（单词）。
+    detail_pending=True 表示例句/影视台词需调 /api/translate-detail 异步补齐。"""
+    base: dict = {
+        "translation": "",
+        "detected": "",
+        "term": "",
+        "phonetic": "",
+        "meanings": [],
+        "examples": [],
+        "movie_examples": [],
+    }
+    full_cached = _cache_get(f"smart5:{sl}:{tl}:{q.strip().lower()}")
+    if isinstance(full_cached, dict) and full_cached.get("translation"):
+        return {**base, **full_cached, "detail_pending": False}
+    fast = None
+    try:
+        fast = glm_fast(q)
+    except Exception:
+        fast = None
+    if fast is None:
+        # 快速通道失败：退回完整链（慢但可靠）
+        try:
+            result = smart_translate(q, sl=sl, tl=tl)
+        except Exception:
+            result = None
+        if result:
+            return {**base, **result, "detail_pending": False}
+        return {**base, "detail_pending": False}
+    detected = str(fast.get("detected") or "en")
+    is_word = bool(_FAST_WORD_RE.match(q.strip())) and detected.startswith("en")
+    out = {
+        **base,
+        "translation": fast["translation"],
+        "detected": detected,
+        "detail_pending": is_word,
+    }
+    yd = youdao_dict(q)
+    if yd:
+        out["term"] = q.strip().lower()
+        out["phonetic"] = yd["phonetic"]
+        out["meanings"] = yd["meanings"]
+    return out
+
 
 def glm_full(q: str, model: str = "glm-5.3") -> dict | None:
     """GLM 备用引擎（单模型，由 smart_translate 编排调用顺序）。"""
